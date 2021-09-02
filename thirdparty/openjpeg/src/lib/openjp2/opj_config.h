@@ -2,6 +2,12 @@
 /*** SET BY GS CONFIGURE SCRIPT ****/
 /*#define OPJ_HAVE_STDINT_H 		1 */
 
+#include "config.h"
+
+#if HAVE_STDINT_H
+#define OPJ_HAVE_STDINT_H 1
+#endif
+
 /*--------------------------------------------------------------------------*/
 /* OpenJPEG Versioning                                                      */
 

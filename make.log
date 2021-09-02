@@ -1,0 +1,742 @@
+    MKDIR build/release/generated
+    MKDIR build/release/scripts
+    MKDIR build/release/source/fitz
+    MKDIR build/release/source/pdf
+    MKDIR build/release/source/xps
+    MKDIR build/release/source/svg
+    MKDIR build/release/source/cbz
+    MKDIR build/release/source/html
+    MKDIR build/release/source/gprf
+    MKDIR build/release/source/tools
+    MKDIR build/release/source/helpers
+    MKDIR build/release/source/helpers/mu-threads
+    MKDIR build/release/platform/x11
+    MKDIR build/release/platform/x11/curl
+    MKDIR build/release/platform/gl
+    CC build/release/source/fitz/filter-sgi.o
+    CC build/release/source/fitz/filter-dct.o
+    CC build/release/source/fitz/noto.o
+    CC build/release/source/fitz/text.o
+    CC build/release/source/fitz/zip.o
+    CC build/release/source/fitz/halftone.o
+    CC build/release/source/fitz/list-device.o
+    CC build/release/source/fitz/pixmap.o
+    CC build/release/source/fitz/draw-glyph.o
+    CC build/release/source/fitz/trace-device.o
+    CC build/release/source/fitz/store.o
+    CC build/release/source/fitz/draw-unpack.o
+    CC build/release/source/fitz/bidi-std.o
+    CC build/release/source/fitz/harfbuzz.o
+    CC build/release/source/fitz/compressed-buffer.o
+    CC build/release/source/fitz/tempfile.o
+    CC build/release/source/fitz/document.o
+    CC build/release/source/fitz/draw-paint.o
+    CC build/release/source/fitz/context.o
+    CC build/release/source/fitz/output-pwg.o
+    CC build/release/source/fitz/path.o
+source/fitz/path.c: In function ‘fz_walk_path’:
+source/fitz/path.c:703:20: warning: ‘y’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+     float c1y = (y + c2y) / 3;
+                    ^
+source/fitz/path.c:702:20: warning: ‘x’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+     float c1x = (x + c2x) / 3;
+                    ^
+    CC build/release/source/fitz/strtof.o
+    CC build/release/source/fitz/memory.o
+    CC build/release/source/fitz/filter-lzw.o
+    CC build/release/source/fitz/memento.o
+    CC build/release/source/fitz/hash.o
+    CC build/release/source/fitz/load-pnm.o
+    CC build/release/source/fitz/output-png.o
+    CC build/release/source/fitz/crypt-md5.o
+    CC build/release/source/fitz/buffer.o
+    CC build/release/source/fitz/filter-thunder.o
+    CC build/release/source/fitz/time.o
+    CC build/release/source/fitz/util.o
+    CC build/release/source/fitz/device.o
+    CC build/release/source/fitz/draw-affine.o
+    CC build/release/source/fitz/untar.o
+    CC build/release/source/fitz/bitmap.o
+    CC build/release/source/fitz/load-png.o
+    CC build/release/source/fitz/filter-predict.o
+    CC build/release/source/fitz/shade.o
+    CC build/release/source/fitz/font.o
+    CC build/release/source/fitz/load-jpx.o
+    CC build/release/source/fitz/draw-edge.o
+    CC build/release/source/fitz/pool.o
+    CC build/release/source/fitz/filter-fax.o
+    CC build/release/source/fitz/crypt-sha2.o
+    CC build/release/source/fitz/bbox-device.o
+    CC build/release/source/fitz/ftoa.o
+    CC build/release/source/fitz/test-device.o
+    CC build/release/source/fitz/draw-mesh.o
+    CC build/release/source/fitz/output.o
+    CC build/release/source/fitz/image.o
+    CC build/release/source/fitz/stream-prog.o
+    CC build/release/source/fitz/stext-search.o
+    CC build/release/source/fitz/output-tga.o
+    CC build/release/source/fitz/unzip.o
+    CC build/release/source/fitz/stext-device.o
+    CC build/release/source/fitz/transition.o
+    CC build/release/source/fitz/jmemcust.o
+    CC build/release/source/fitz/document-all.o
+    CC build/release/source/fitz/tree.o
+    CC build/release/source/fitz/xml.o
+    CC build/release/source/fitz/load-gif.o
+    CC build/release/source/fitz/stream-open.o
+    CC build/release/source/fitz/draw-device.o
+    CC build/release/source/fitz/output-cbz.o
+    CC build/release/source/fitz/output-ps.o
+    CC build/release/source/fitz/crypt-aes.o
+    CC build/release/source/fitz/outline.o
+    CC build/release/source/fitz/string.o
+    CC build/release/source/fitz/stext-output.o
+    CC build/release/source/fitz/crypt-arc4.o
+    CC build/release/source/fitz/output-pcl.o
+    CC build/release/source/fitz/geometry.o
+    CC build/release/source/fitz/getopt.o
+    CC build/release/source/fitz/track-usage.o
+    CC build/release/source/fitz/separation.o
+    CC build/release/source/fitz/filter-basic.o
+    CC build/release/source/fitz/load-bmp.o
+    CC build/release/source/fitz/filter-leech.o
+    CC build/release/source/fitz/stream-read.o
+    CC build/release/source/fitz/error.o
+    CC build/release/source/fitz/filter-jbig2.o
+    CC build/release/source/fitz/function.o
+    CC build/release/source/fitz/archive.o
+    CC build/release/source/fitz/printf.o
+    CC build/release/source/fitz/draw-path.o
+source/fitz/draw-path.c: In function ‘fz_dash_lineto’:
+source/fitz/draw-path.c:634:14: warning: ‘old_by’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+  s->seg[0].y = s->beg[0].y = y;
+              ^
+source/fitz/draw-path.c:910:16: note: ‘old_by’ was declared here
+  float old_bx, old_by;
+                ^
+source/fitz/draw-path.c:633:14: warning: ‘old_bx’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+  s->seg[0].x = s->beg[0].x = x;
+              ^
+source/fitz/draw-path.c:910:8: note: ‘old_bx’ was declared here
+  float old_bx, old_by;
+        ^
+    CC build/release/source/fitz/bidi.o
+    CC build/release/source/fitz/draw-scale-simple.o
+    CC build/release/source/fitz/load-jxr.o
+    CC build/release/source/fitz/output-pnm.o
+    CC build/release/source/fitz/draw-blend.o
+    CC build/release/source/fitz/colorspace.o
+    CC build/release/source/fitz/stext-paragraph.o
+source/fitz/stext-paragraph.c: In function ‘fz_analyze_text’:
+source/fitz/stext-paragraph.c:1355:19: warning: ‘left’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+      span->indent = left;
+                   ^
+    CC build/release/source/fitz/ucdn.o
+    CC build/release/source/fitz/writer.o
+    CC build/release/source/fitz/link.o
+    CC build/release/source/fitz/strtod.o
+    CC build/release/source/fitz/load-tiff.o
+    CC build/release/source/fitz/svg-device.o
+source/fitz/svg-device.c: In function ‘svg_send_image’:
+source/fitz/svg-device.c:935:3: warning: ‘id’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+   fz_write_printf(ctx, out, "<use xlink:href=\"#im%d\" x=\"0\" y=\"0\" width=\"%d\" height=\"%d\"/>\n",
+   ^
+    CC build/release/source/fitz/filter-flate.o
+    CC build/release/source/fitz/output-svg.o
+    CC build/release/source/fitz/glyph.o
+    CC build/release/source/fitz/directory.o
+    CC build/release/source/fitz/load-jpeg.o
+    CC build/release/scripts/hexdump.o
+    LINK build/release/scripts/hexdump.exe
+    MKDIR generated
+    GEN generated/DroidSansFallbackFull.c
+    GEN generated/DroidSansFallback.c
+    GEN generated/NotoNaskhArabic-Regular.c
+    GEN generated/NotoSansLydian-Regular.c
+    GEN generated/NotoKufiArabic-Regular.c
+    GEN generated/NotoSansPhoenician-Regular.c
+    GEN generated/NotoSerifLao-Regular.c
+    GEN generated/NotoNastaliqUrdu-Regular.c
+    GEN generated/NotoSerifMalayalam-Regular.c
+    GEN generated/NotoSansTagalog-Regular.c
+    GEN generated/NotoSansTelugu-Regular.c
+    GEN generated/NotoSansLepcha-Regular.c
+    GEN generated/NotoSansPhagsPa-Regular.c
+    GEN generated/NotoSansSyriacEastern-Regular.c
+    GEN generated/NotoSansOgham-Regular.c
+    GEN generated/NotoSansDevanagari-Regular.c
+    GEN generated/NotoSansJavanese-Regular.c
+    GEN generated/NotoSansLycian-Regular.c
+    GEN generated/NotoSerifGujarati-Regular.c
+    GEN generated/NotoSansLao-Regular.c
+    GEN generated/NotoSansOldPersian-Regular.c
+    GEN generated/NotoSerifTelugu-Regular.c
+    GEN generated/NotoSansSundanese-Regular.c
+    GEN generated/NotoSansEgyptianHieroglyphs-Regular.c
+    GEN generated/NotoSans-Regular.c
+    GEN generated/NotoSansTamil-Regular.c
+    GEN generated/NotoSansDeseret-Regular.c
+    GEN generated/NotoSansUgaritic-Regular.c
+    GEN generated/NotoSansGujarati-Regular.c
+    GEN generated/NotoSansKaithi-Regular.c
+    GEN generated/NotoSansShavian-Regular.c
+    GEN generated/NotoSansLimbu-Regular.c
+    GEN generated/NotoSansCarian-Regular.c
+    GEN generated/NotoSansSyriacEstrangela-Regular.c
+    GEN generated/NotoSansSamaritan-Regular.c
+    GEN generated/NotoSansBamum-Regular.c
+    GEN generated/NotoSansGeorgian-Regular.c
+    GEN generated/NotoSansMeeteiMayek-Regular.c
+    GEN generated/NotoSansThai-Regular.c
+    GEN generated/NotoSansYi-Regular.c
+    GEN generated/NotoSansKhmer-Regular.c
+    GEN generated/NotoSansRunic-Regular.c
+    GEN generated/NotoSansCham-Regular.c
+    GEN generated/NotoSansEthiopic-Regular.c
+    GEN generated/NotoSerif-Regular.c
+    GEN generated/NotoSansThaana-Regular.c
+    GEN generated/NotoSansOldTurkic-Regular.c
+    GEN generated/NotoSansOlChiki-Regular.c
+    GEN generated/NotoSansInscriptionalPahlavi-Regular.c
+    GEN generated/NotoSansTaiTham-Regular.c
+    GEN generated/NotoSerifDevanagari-Regular.c
+    GEN generated/NotoSansArmenian-Regular.c
+    GEN generated/NotoSansInscriptionalParthian-Regular.c
+    GEN generated/NotoSansBengali-Regular.c
+    GEN generated/NotoSansGothic-Regular.c
+    GEN generated/NotoSansTaiLe-Regular.c
+    GEN generated/NotoSansLinearB-Regular.c
+    GEN generated/NotoSansNKo-Regular.c
+    GEN generated/NotoSansBuginese-Regular.c
+    GEN generated/NotoEmoji-Regular.c
+    GEN generated/NotoSansMongolian-Regular.c
+    GEN generated/NotoSansHanunoo-Regular.c
+    GEN generated/NotoSansCoptic-Regular.c
+    GEN generated/NotoSerifThai-Regular.c
+    GEN generated/NotoSansTifinagh-Regular.c
+    GEN generated/NotoSansKharoshthi-Regular.c
+    GEN generated/NotoSansKannada-Regular.c
+    GEN generated/NotoSerifKannada-Regular.c
+    GEN generated/NotoSansBatak-Regular.c
+    GEN generated/NotoSansKayahLi-Regular.c
+    GEN generated/NotoSansNewTaiLue-Regular.c
+    GEN generated/NotoSansOsmanya-Regular.c
+    GEN generated/NotoSansTaiViet-Regular.c
+    GEN generated/NotoSansHebrew-Regular.c
+    GEN generated/NotoSansCypriot-Regular.c
+    GEN generated/NotoSansSinhala-Regular.c
+    GEN generated/NotoSansOldSouthArabian-Regular.c
+    GEN generated/NotoSansTibetan-Regular.c
+    GEN generated/NotoSansBalinese-Regular.c
+    GEN generated/NotoSansMalayalam-Regular.c
+    GEN generated/NotoSansRejang-Regular.c
+    GEN generated/NotoSansBrahmi-Regular.c
+    GEN generated/NotoSansCanadianAboriginal-Regular.c
+    GEN generated/NotoSerifGeorgian-Regular.c
+    GEN generated/NotoSansImperialAramaic-Regular.c
+    GEN generated/NotoSansCuneiform-Regular.c
+    GEN generated/NotoSansSymbols-Regular.c
+    GEN generated/NotoSerifKhmer-Regular.c
+    GEN generated/NotoSansGlagolitic-Regular.c
+    GEN generated/NotoSansGurmukhi-Regular.c
+    GEN generated/NotoSansOriya-Regular.c
+    GEN generated/NotoSansCherokee-Regular.c
+    GEN generated/NotoSerifArmenian-Regular.c
+    GEN generated/NotoSansLisu-Regular.c
+    GEN generated/NotoSansSylotiNagri-Regular.c
+    GEN generated/NotoSansAvestan-Regular.c
+    GEN generated/NotoSansVai-Regular.c
+    GEN generated/NotoSansSaurashtra-Regular.c
+    GEN generated/NotoSerifBengali-Regular.c
+    GEN generated/NotoSansSyriacWestern-Regular.c
+    GEN generated/NotoSerifTamil-Regular.c
+    GEN generated/NotoSansMyanmar-Regular.c
+    GEN generated/NotoSansOldItalic-Regular.c
+    GEN generated/NotoSansTagbanwa-Regular.c
+    GEN generated/NotoSansBuhid-Regular.c
+    GEN generated/NotoSansMandaic-Regular.c
+    GEN generated/SourceHanSansTW-Regular.c
+    GEN generated/SourceHanSansKR-Regular.c
+    GEN generated/SourceHanSansCN-Regular.c
+    GEN generated/SourceHanSansJP-Regular.c
+    GEN generated/NimbusSans-Oblique.c
+    GEN generated/NimbusMonoPS-Italic.c
+    GEN generated/NimbusMonoPS-BoldItalic.c
+    GEN generated/NimbusSans-Bold.c
+    GEN generated/NimbusMonoPS-Regular.c
+    GEN generated/NimbusRoman-Bold.c
+    GEN generated/Dingbats.c
+    GEN generated/NimbusSans-BoldOblique.c
+    GEN generated/StandardSymbolsPS.c
+    GEN generated/NimbusRoman-Italic.c
+    GEN generated/NimbusMonoPS-Bold.c
+    GEN generated/NimbusSans-Regular.c
+    GEN generated/NimbusRoman-BoldItalic.c
+    GEN generated/NimbusRoman-Regular.c
+    GEN generated/CharisSIL-B.c
+    GEN generated/CharisSIL-R.c
+    GEN generated/CharisSIL-I.c
+    GEN generated/CharisSIL-BI.c
+    CC build/release/generated/DroidSansFallbackFull.o
+    CC build/release/generated/DroidSansFallback.o
+    CC build/release/generated/NotoNaskhArabic-Regular.o
+    CC build/release/generated/NotoSansLydian-Regular.o
+    CC build/release/generated/NotoKufiArabic-Regular.o
+    CC build/release/generated/NotoSansPhoenician-Regular.o
+    CC build/release/generated/NotoSerifLao-Regular.o
+    CC build/release/generated/NotoNastaliqUrdu-Regular.o
+    CC build/release/generated/NotoSerifMalayalam-Regular.o
+    CC build/release/generated/NotoSansTagalog-Regular.o
+    CC build/release/generated/NotoSansTelugu-Regular.o
+    CC build/release/generated/NotoSansLepcha-Regular.o
+    CC build/release/generated/NotoSansPhagsPa-Regular.o
+    CC build/release/generated/NotoSansSyriacEastern-Regular.o
+    CC build/release/generated/NotoSansOgham-Regular.o
+    CC build/release/generated/NotoSansDevanagari-Regular.o
+    CC build/release/generated/NotoSansJavanese-Regular.o
+    CC build/release/generated/NotoSansLycian-Regular.o
+    CC build/release/generated/NotoSerifGujarati-Regular.o
+    CC build/release/generated/NotoSansLao-Regular.o
+    CC build/release/generated/NotoSansOldPersian-Regular.o
+    CC build/release/generated/NotoSerifTelugu-Regular.o
+    CC build/release/generated/NotoSansSundanese-Regular.o
+    CC build/release/generated/NotoSansEgyptianHieroglyphs-Regular.o
+    CC build/release/generated/NotoSans-Regular.o
+    CC build/release/generated/NotoSansTamil-Regular.o
+    CC build/release/generated/NotoSansDeseret-Regular.o
+    CC build/release/generated/NotoSansUgaritic-Regular.o
+    CC build/release/generated/NotoSansGujarati-Regular.o
+    CC build/release/generated/NotoSansKaithi-Regular.o
+    CC build/release/generated/NotoSansShavian-Regular.o
+    CC build/release/generated/NotoSansLimbu-Regular.o
+    CC build/release/generated/NotoSansCarian-Regular.o
+    CC build/release/generated/NotoSansSyriacEstrangela-Regular.o
+    CC build/release/generated/NotoSansSamaritan-Regular.o
+    CC build/release/generated/NotoSansBamum-Regular.o
+    CC build/release/generated/NotoSansGeorgian-Regular.o
+    CC build/release/generated/NotoSansMeeteiMayek-Regular.o
+    CC build/release/generated/NotoSansThai-Regular.o
+    CC build/release/generated/NotoSansYi-Regular.o
+    CC build/release/generated/NotoSansKhmer-Regular.o
+    CC build/release/generated/NotoSansRunic-Regular.o
+    CC build/release/generated/NotoSansCham-Regular.o
+    CC build/release/generated/NotoSansEthiopic-Regular.o
+    CC build/release/generated/NotoSerif-Regular.o
+    CC build/release/generated/NotoSansThaana-Regular.o
+    CC build/release/generated/NotoSansOldTurkic-Regular.o
+    CC build/release/generated/NotoSansOlChiki-Regular.o
+    CC build/release/generated/NotoSansInscriptionalPahlavi-Regular.o
+    CC build/release/generated/NotoSansTaiTham-Regular.o
+    CC build/release/generated/NotoSerifDevanagari-Regular.o
+    CC build/release/generated/NotoSansArmenian-Regular.o
+    CC build/release/generated/NotoSansInscriptionalParthian-Regular.o
+    CC build/release/generated/NotoSansBengali-Regular.o
+    CC build/release/generated/NotoSansGothic-Regular.o
+    CC build/release/generated/NotoSansTaiLe-Regular.o
+    CC build/release/generated/NotoSansLinearB-Regular.o
+    CC build/release/generated/NotoSansNKo-Regular.o
+    CC build/release/generated/NotoSansBuginese-Regular.o
+    CC build/release/generated/NotoEmoji-Regular.o
+    CC build/release/generated/NotoSansMongolian-Regular.o
+    CC build/release/generated/NotoSansHanunoo-Regular.o
+    CC build/release/generated/NotoSansCoptic-Regular.o
+    CC build/release/generated/NotoSerifThai-Regular.o
+    CC build/release/generated/NotoSansTifinagh-Regular.o
+    CC build/release/generated/NotoSansKharoshthi-Regular.o
+    CC build/release/generated/NotoSansKannada-Regular.o
+    CC build/release/generated/NotoSerifKannada-Regular.o
+    CC build/release/generated/NotoSansBatak-Regular.o
+    CC build/release/generated/NotoSansKayahLi-Regular.o
+    CC build/release/generated/NotoSansNewTaiLue-Regular.o
+    CC build/release/generated/NotoSansOsmanya-Regular.o
+    CC build/release/generated/NotoSansTaiViet-Regular.o
+    CC build/release/generated/NotoSansHebrew-Regular.o
+    CC build/release/generated/NotoSansCypriot-Regular.o
+    CC build/release/generated/NotoSansSinhala-Regular.o
+    CC build/release/generated/NotoSansOldSouthArabian-Regular.o
+    CC build/release/generated/NotoSansTibetan-Regular.o
+    CC build/release/generated/NotoSansBalinese-Regular.o
+    CC build/release/generated/NotoSansMalayalam-Regular.o
+    CC build/release/generated/NotoSansRejang-Regular.o
+    CC build/release/generated/NotoSansBrahmi-Regular.o
+    CC build/release/generated/NotoSansCanadianAboriginal-Regular.o
+    CC build/release/generated/NotoSerifGeorgian-Regular.o
+    CC build/release/generated/NotoSansImperialAramaic-Regular.o
+    CC build/release/generated/NotoSansCuneiform-Regular.o
+    CC build/release/generated/NotoSansSymbols-Regular.o
+    CC build/release/generated/NotoSerifKhmer-Regular.o
+    CC build/release/generated/NotoSansGlagolitic-Regular.o
+    CC build/release/generated/NotoSansGurmukhi-Regular.o
+    CC build/release/generated/NotoSansOriya-Regular.o
+    CC build/release/generated/NotoSansCherokee-Regular.o
+    CC build/release/generated/NotoSerifArmenian-Regular.o
+    CC build/release/generated/NotoSansLisu-Regular.o
+    CC build/release/generated/NotoSansSylotiNagri-Regular.o
+    CC build/release/generated/NotoSansAvestan-Regular.o
+    CC build/release/generated/NotoSansVai-Regular.o
+    CC build/release/generated/NotoSansSaurashtra-Regular.o
+    CC build/release/generated/NotoSerifBengali-Regular.o
+    CC build/release/generated/NotoSansSyriacWestern-Regular.o
+    CC build/release/generated/NotoSerifTamil-Regular.o
+    CC build/release/generated/NotoSansMyanmar-Regular.o
+    CC build/release/generated/NotoSansOldItalic-Regular.o
+    CC build/release/generated/NotoSansTagbanwa-Regular.o
+    CC build/release/generated/NotoSansBuhid-Regular.o
+    CC build/release/generated/NotoSansMandaic-Regular.o
+    CC build/release/generated/SourceHanSansTW-Regular.o
+    CC build/release/generated/SourceHanSansKR-Regular.o
+    CC build/release/generated/SourceHanSansCN-Regular.o
+    CC build/release/generated/SourceHanSansJP-Regular.o
+    CC build/release/generated/NimbusSans-Oblique.o
+    CC build/release/generated/NimbusMonoPS-Italic.o
+    CC build/release/generated/NimbusMonoPS-BoldItalic.o
+    CC build/release/generated/NimbusSans-Bold.o
+    CC build/release/generated/NimbusMonoPS-Regular.o
+    CC build/release/generated/NimbusRoman-Bold.o
+    CC build/release/generated/Dingbats.o
+    CC build/release/generated/NimbusSans-BoldOblique.o
+    CC build/release/generated/StandardSymbolsPS.o
+    CC build/release/generated/NimbusRoman-Italic.o
+    CC build/release/generated/NimbusMonoPS-Bold.o
+    CC build/release/generated/NimbusSans-Regular.o
+    CC build/release/generated/NimbusRoman-BoldItalic.o
+    CC build/release/generated/NimbusRoman-Regular.o
+    CC build/release/generated/CharisSIL-B.o
+    CC build/release/generated/CharisSIL-R.o
+    CC build/release/generated/CharisSIL-I.o
+    CC build/release/generated/CharisSIL-BI.o
+    CC build/release/scripts/namedump.o
+    LINK build/release/scripts/namedump.exe
+    GEN include/mupdf/pdf/name-table.h
+    CC build/release/source/pdf/pdf-nametree.o
+    CC build/release/source/pdf/pdf-cmap-parse.o
+    CC build/release/source/pdf/pdf-cmap.o
+    CC build/release/source/pdf/pdf-function.o
+    CC build/release/source/pdf/pdf-type3.o
+    GEN generated/gen_adobe_ca.h
+    CC build/release/source/pdf/pdf-pkcs7.o
+    CC build/release/source/pdf/pdf-metrics.o
+    CC build/release/source/pdf/pdf-store.o
+    CC build/release/source/pdf/pdf-font.o
+    CC build/release/source/pdf/pdf-cmap-load.o
+    CC build/release/source/pdf/pdf-xobject.o
+    CC build/release/source/pdf/pdf-layer.o
+    CC build/release/source/pdf/pdf-portfolio.o
+    CC build/release/source/pdf/pdf-op-filter.o
+    CC build/release/source/pdf/pdf-parse.o
+    CC build/release/source/pdf/pdf-encoding.o
+    CC build/release/source/pdf/pdf-form.o
+    CC build/release/source/pdf/pdf-op-buffer.o
+    CC build/release/source/pdf/pdf-run.o
+    CC build/release/source/pdf/pdf-clean-file.o
+    CC build/release/source/pdf/pdf-pattern.o
+    CC build/release/source/pdf/pdf-outline.o
+    CC build/release/source/pdf/pdf-colorspace.o
+    CC build/release/source/pdf/pdf-crypt.o
+    CC build/release/source/pdf/pdf-write.o
+source/pdf/pdf-write.c: In function ‘complete_signatures’:
+source/pdf/pdf-write.c:2624:5: warning: ignoring return value of ‘fread’, declared with attribute warn_unused_result [-Wunused-result]
+     (void)fread(buf, 1, sizeof(buf), f);
+     ^
+    CC build/release/source/pdf/pdf-resources.o
+    CC build/release/source/pdf/pdf-annot.o
+    CC build/release/source/pdf/pdf-op-run.o
+    CC build/release/source/pdf/pdf-xref.o
+    CC build/release/scripts/cmapdump.o
+    LINK build/release/scripts/cmapdump.exe
+    GEN generated/gen_cmap_cjk.h
+    GEN generated/gen_cmap_extra.h
+    GEN generated/gen_cmap_utf8.h
+    GEN generated/gen_cmap_utf32.h
+    CC build/release/source/pdf/pdf-cmap-table.o
+    CC build/release/source/pdf/pdf-repair.o
+    CC build/release/source/pdf/pdf-unicode.o
+    CC build/release/source/pdf/pdf-stream.o
+    CC build/release/source/pdf/pdf-object.o
+    CC build/release/source/pdf/pdf-event.o
+    GEN generated/gen_js_util.h
+    CC build/release/source/pdf/pdf-js.o
+    CC build/release/source/pdf/pdf-annot-edit.o
+    CC build/release/source/pdf/pdf-lex.o
+    CC build/release/source/pdf/pdf-shade.o
+    CC build/release/source/pdf/pdf-field.o
+    CC build/release/source/pdf/pdf-image.o
+    CC build/release/source/pdf/pdf-graft.o
+    CC build/release/source/pdf/pdf-device.o
+    CC build/release/source/pdf/pdf-interpret.o
+    CC build/release/source/pdf/pdf-clean.o
+    CC build/release/source/pdf/pdf-page.o
+    CC build/release/source/pdf/pdf-appearance.o
+    CC build/release/source/xps/xps-path.o
+    CC build/release/source/xps/xps-gradient.o
+    CC build/release/source/xps/xps-util.o
+    CC build/release/source/xps/xps-link.o
+    CC build/release/source/xps/xps-outline.o
+    CC build/release/source/xps/xps-zip.o
+    CC build/release/source/xps/xps-common.o
+    CC build/release/source/xps/xps-tile.o
+    CC build/release/source/xps/xps-doc.o
+    CC build/release/source/xps/xps-resource.o
+    CC build/release/source/xps/xps-image.o
+    CC build/release/source/xps/xps-glyphs.o
+    CC build/release/source/svg/svg-doc.o
+    CC build/release/source/svg/svg-color.o
+    CC build/release/source/svg/svg-parse.o
+    CC build/release/source/svg/svg-run.o
+    CC build/release/source/cbz/muimg.o
+    CC build/release/source/cbz/mucbz.o
+    CC build/release/source/cbz/mutiff.o
+    CC build/release/source/html/html-font.o
+    CC build/release/source/html/html-layout.o
+    CC build/release/source/html/css-apply.o
+    CC build/release/source/html/epub-doc.o
+    CC build/release/source/html/html-doc.o
+    CC build/release/source/html/css-parse.o
+    CC build/release/source/gprf/gprf-doc.o
+    CC build/release/source/gprf/gprf-skeleton.o
+    RM build/release/libmupdf.a
+    AR build/release/libmupdf.a
+    MKDIR build/release/thirdparty/freetype
+    CC build/release/thirdparty/freetype/ftbase.o
+In file included from thirdparty/freetype/src/base/ftrfork.c:32:0,
+                 from thirdparty/freetype/src/base/ftbase.c:32:
+thirdparty/freetype/src/base/ftbase.h:38:3: warning: ‘open_face_PS_from_sfnt_stream’ declared ‘static’ but never defined [-Wunused-function]
+   open_face_PS_from_sfnt_stream( FT_Library     library,
+   ^
+thirdparty/freetype/src/base/ftbase.h:49:3: warning: ‘open_face_from_buffer’ declared ‘static’ but never defined [-Wunused-function]
+   open_face_from_buffer( FT_Library   library,
+   ^
+In file included from thirdparty/freetype/src/base/ftbase.c:32:0:
+thirdparty/freetype/src/base/ftrfork.c:436:3: warning: ‘ft_raccess_rule_by_darwin_vfs’ defined but not used [-Wunused-function]
+   ft_raccess_rule_by_darwin_vfs( FT_Library  library,
+   ^
+    CC build/release/thirdparty/freetype/ftbbox.o
+    CC build/release/thirdparty/freetype/ftbitmap.o
+    CC build/release/thirdparty/freetype/ftdebug.o
+    CC build/release/thirdparty/freetype/ftfntfmt.o
+    CC build/release/thirdparty/freetype/ftgasp.o
+    CC build/release/thirdparty/freetype/ftglyph.o
+    CC build/release/thirdparty/freetype/ftinit.o
+    CC build/release/thirdparty/freetype/ftstroke.o
+    CC build/release/thirdparty/freetype/ftsynth.o
+    CC build/release/thirdparty/freetype/ftsystem.o
+    CC build/release/thirdparty/freetype/fttype1.o
+    CC build/release/thirdparty/freetype/cff.o
+    CC build/release/thirdparty/freetype/psaux.o
+    CC build/release/thirdparty/freetype/pshinter.o
+    CC build/release/thirdparty/freetype/psnames.o
+    CC build/release/thirdparty/freetype/raster.o
+    CC build/release/thirdparty/freetype/sfnt.o
+    CC build/release/thirdparty/freetype/smooth.o
+    CC build/release/thirdparty/freetype/truetype.o
+    CC build/release/thirdparty/freetype/type1.o
+    CC build/release/thirdparty/freetype/type1cid.o
+    MKDIR build/release/thirdparty/harfbuzz
+    CC build/release/thirdparty/harfbuzz/hb-blob.o
+    CC build/release/thirdparty/harfbuzz/hb-buffer.o
+    CC build/release/thirdparty/harfbuzz/hb-buffer-serialize.o
+    CC build/release/thirdparty/harfbuzz/hb-common.o
+    CC build/release/thirdparty/harfbuzz/hb-face.o
+    CC build/release/thirdparty/harfbuzz/hb-fallback-shape.o
+    CC build/release/thirdparty/harfbuzz/hb-font.o
+    CC build/release/thirdparty/harfbuzz/hb-ft.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-font.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-layout.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-map.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-arabic.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-default.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-hangul.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-hebrew.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-indic-table.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-indic.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-myanmar.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-thai.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-tibetan.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-use-table.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-complex-use.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-fallback.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape-normalize.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-shape.o
+    CC build/release/thirdparty/harfbuzz/hb-ot-tag.o
+    CC build/release/thirdparty/harfbuzz/hb-set.o
+    CC build/release/thirdparty/harfbuzz/hb-shape-plan.o
+    CC build/release/thirdparty/harfbuzz/hb-shape.o
+    CC build/release/thirdparty/harfbuzz/hb-shaper.o
+    CC build/release/thirdparty/harfbuzz/hb-ucdn.o
+    CC build/release/thirdparty/harfbuzz/hb-unicode.o
+    CC build/release/thirdparty/harfbuzz/hb-warning.o
+    MKDIR build/release/thirdparty/jbig2dec
+    CC build/release/thirdparty/jbig2dec/jbig2.o
+    CC build/release/thirdparty/jbig2dec/jbig2_arith.o
+    CC build/release/thirdparty/jbig2dec/jbig2_arith_iaid.o
+    CC build/release/thirdparty/jbig2dec/jbig2_arith_int.o
+    CC build/release/thirdparty/jbig2dec/jbig2_generic.o
+    CC build/release/thirdparty/jbig2dec/jbig2_halftone.o
+    CC build/release/thirdparty/jbig2dec/jbig2_huffman.o
+    CC build/release/thirdparty/jbig2dec/jbig2_image.o
+    CC build/release/thirdparty/jbig2dec/jbig2_metadata.o
+    CC build/release/thirdparty/jbig2dec/jbig2_mmr.o
+    CC build/release/thirdparty/jbig2dec/jbig2_page.o
+    CC build/release/thirdparty/jbig2dec/jbig2_refinement.o
+    CC build/release/thirdparty/jbig2dec/jbig2_segment.o
+    CC build/release/thirdparty/jbig2dec/jbig2_symbol_dict.o
+    CC build/release/thirdparty/jbig2dec/jbig2_text.o
+    MKDIR build/release/thirdparty/libjpeg
+    CC build/release/thirdparty/libjpeg/jaricom.o
+    CC build/release/thirdparty/libjpeg/jcomapi.o
+    CC build/release/thirdparty/libjpeg/jdapimin.o
+    CC build/release/thirdparty/libjpeg/jdapistd.o
+    CC build/release/thirdparty/libjpeg/jdarith.o
+    CC build/release/thirdparty/libjpeg/jdatadst.o
+    CC build/release/thirdparty/libjpeg/jdatasrc.o
+    CC build/release/thirdparty/libjpeg/jdcoefct.o
+    CC build/release/thirdparty/libjpeg/jdcolor.o
+    CC build/release/thirdparty/libjpeg/jddctmgr.o
+    CC build/release/thirdparty/libjpeg/jdhuff.o
+    CC build/release/thirdparty/libjpeg/jdinput.o
+    CC build/release/thirdparty/libjpeg/jdmainct.o
+    CC build/release/thirdparty/libjpeg/jdmarker.o
+    CC build/release/thirdparty/libjpeg/jdmaster.o
+    CC build/release/thirdparty/libjpeg/jdmerge.o
+    CC build/release/thirdparty/libjpeg/jdpostct.o
+    CC build/release/thirdparty/libjpeg/jdsample.o
+    CC build/release/thirdparty/libjpeg/jdtrans.o
+    CC build/release/thirdparty/libjpeg/jerror.o
+    CC build/release/thirdparty/libjpeg/jfdctflt.o
+    CC build/release/thirdparty/libjpeg/jfdctfst.o
+    CC build/release/thirdparty/libjpeg/jfdctint.o
+    CC build/release/thirdparty/libjpeg/jidctflt.o
+    CC build/release/thirdparty/libjpeg/jidctfst.o
+    CC build/release/thirdparty/libjpeg/jidctint.o
+    CC build/release/thirdparty/libjpeg/jmemmgr.o
+    CC build/release/thirdparty/libjpeg/jquant1.o
+    CC build/release/thirdparty/libjpeg/jquant2.o
+    CC build/release/thirdparty/libjpeg/jutils.o
+    MKDIR build/release/thirdparty/mujs
+    CC build/release/thirdparty/mujs/one.o
+thirdparty/mujs/one.c: In function ‘js_strictequal’:
+thirdparty/mujs/one.c:26:0: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+ #include "utftype.c"
+ ^
+thirdparty/mujs/one.c: In function ‘js_concat’:
+thirdparty/mujs/one.c:26:0: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+thirdparty/mujs/one.c: In function ‘compare’:
+thirdparty/mujs/one.c:26:0: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+thirdparty/mujs/one.c: In function ‘js_instanceof’:
+thirdparty/mujs/one.c:26:0: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+thirdparty/mujs/one.c: In function ‘js_compare’:
+thirdparty/mujs/one.c:26:0: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+thirdparty/mujs/one.c: In function ‘js_equal’:
+thirdparty/mujs/one.c:26:0: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+In file included from thirdparty/mujs/one.c:20:0:
+thirdparty/mujs/jsvalue.c: In function ‘js_strictequal’:
+thirdparty/mujs/jsrun.c:185:14: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+  if (idx < 0 || idx >= TOP)
+              ^
+In file included from thirdparty/mujs/one.c:24:0:
+thirdparty/mujs/regexp.c: In function ‘compile’:
+thirdparty/mujs/regexp.c:693:14: warning: ‘inst’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+     split->x = inst;
+              ^
+thirdparty/mujs/regexp.c: In function ‘lex’:
+thirdparty/mujs/regexp.c:324:3: warning: ‘save’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+   addrange(g, save, save);
+   ^
+thirdparty/mujs/regexp.c:254:7: note: ‘save’ was declared here
+  Rune save;
+       ^
+In file included from thirdparty/mujs/one.c:20:0:
+thirdparty/mujs/jsvalue.c: In function ‘js_concat’:
+thirdparty/mujs/jsrun.c:185:14: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+  if (idx < 0 || idx >= TOP)
+              ^
+thirdparty/mujs/jsvalue.c: In function ‘js_instanceof’:
+thirdparty/mujs/jsrun.c:185:14: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+  if (idx < 0 || idx >= TOP)
+              ^
+thirdparty/mujs/jsvalue.c: In function ‘js_compare’:
+thirdparty/mujs/jsrun.c:185:14: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+  if (idx < 0 || idx >= TOP)
+              ^
+thirdparty/mujs/jsvalue.c: In function ‘js_equal’:
+thirdparty/mujs/jsrun.c:185:14: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+  if (idx < 0 || idx >= TOP)
+              ^
+thirdparty/mujs/jsarray.c: In function ‘Ap_sort’:
+thirdparty/mujs/jsrun.c:185:14: warning: assuming signed overflow does not occur when assuming that (X - c) > X is always false [-Wstrict-overflow]
+  if (idx < 0 || idx >= TOP)
+              ^
+    MKDIR build/release/thirdparty/openjpeg
+    CC build/release/thirdparty/openjpeg/bio.o
+    CC build/release/thirdparty/openjpeg/cidx_manager.o
+    CC build/release/thirdparty/openjpeg/cio.o
+    CC build/release/thirdparty/openjpeg/dwt.o
+    CC build/release/thirdparty/openjpeg/event.o
+    CC build/release/thirdparty/openjpeg/function_list.o
+    CC build/release/thirdparty/openjpeg/image.o
+    CC build/release/thirdparty/openjpeg/invert.o
+    CC build/release/thirdparty/openjpeg/j2k.o
+    CC build/release/thirdparty/openjpeg/jp2.o
+    CC build/release/thirdparty/openjpeg/mct.o
+    CC build/release/thirdparty/openjpeg/mqc.o
+    CC build/release/thirdparty/openjpeg/openjpeg.o
+    CC build/release/thirdparty/openjpeg/phix_manager.o
+    CC build/release/thirdparty/openjpeg/pi.o
+    CC build/release/thirdparty/openjpeg/ppix_manager.o
+    CC build/release/thirdparty/openjpeg/raw.o
+    CC build/release/thirdparty/openjpeg/t1.o
+    CC build/release/thirdparty/openjpeg/t2.o
+    CC build/release/thirdparty/openjpeg/tcd.o
+    CC build/release/thirdparty/openjpeg/tgt.o
+    CC build/release/thirdparty/openjpeg/thix_manager.o
+    CC build/release/thirdparty/openjpeg/tpix_manager.o
+    CC build/release/thirdparty/openjpeg/thread.o
+    MKDIR build/release/thirdparty/zlib
+    CC build/release/thirdparty/zlib/adler32.o
+    CC build/release/thirdparty/zlib/compress.o
+    CC build/release/thirdparty/zlib/crc32.o
+    CC build/release/thirdparty/zlib/deflate.o
+    CC build/release/thirdparty/zlib/inffast.o
+    CC build/release/thirdparty/zlib/inflate.o
+    CC build/release/thirdparty/zlib/inftrees.o
+    CC build/release/thirdparty/zlib/trees.o
+    CC build/release/thirdparty/zlib/uncompr.o
+    CC build/release/thirdparty/zlib/zutil.o
+    CC build/release/thirdparty/zlib/gzlib.o
+    CC build/release/thirdparty/zlib/gzwrite.o
+    CC build/release/thirdparty/zlib/gzclose.o
+    CC build/release/thirdparty/zlib/gzread.o
+    RM build/release/libmupdfthird.a
+    AR build/release/libmupdfthird.a
+    CC build/release/source/tools/mutool.o
+    CC build/release/source/tools/muconvert.o
+    CC build/release/source/tools/mudraw.o
+    CC build/release/source/tools/murun.o
+    CC build/release/source/tools/pdfextract.o
+    CC build/release/source/tools/pdfposter.o
+    CC build/release/source/tools/pdfmerge.o
+    CC build/release/source/tools/pdfinfo.o
+    CC build/release/source/tools/pdfclean.o
+    CC build/release/source/tools/pdfshow.o
+    CC build/release/source/tools/pdfcreate.o
+    CC build/release/source/tools/pdfpages.o
+    CC build/release/source/tools/pdfportfolio.o
+    CC build/release/source/helpers/mu-threads/mu-threads.o
+    RM build/release/libmuthreads.a
+    AR build/release/libmuthreads.a
+    LINK build/release/mutool
+    CC build/release/platform/x11/x11_main.o
+platform/x11/x11_main.c: In function ‘wincopyfile’:
+platform/x11/x11_main.c:320:3: warning: ignoring return value of ‘system’, declared with attribute warn_unused_result [-Wunused-result]
+   system(buf);
+   ^
+    CC build/release/platform/x11/x11_image.o
+    CC build/release/platform/x11/pdfapp.o
+    LINK build/release/mupdf-x11
+    CC build/release/platform/gl/gl-font.o
+In file included from platform/gl/gl-app.h:8:0,
+                 from platform/gl/gl-font.c:15:
+thirdparty/glfw/include/GLFW/glfw3.h:184:21: fatal error: GL/gl.h: No such file or directory
+compilation terminated.
+Makefile:116: recipe for target 'build/release/platform/gl/gl-font.o' failed
+make: *** [build/release/platform/gl/gl-font.o] Error 1

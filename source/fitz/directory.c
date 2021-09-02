@@ -1,3 +1,4 @@
+#include <sys/stat.h>
 #include "mupdf/fitz.h"
 
 typedef struct fz_directory_s fz_directory;
