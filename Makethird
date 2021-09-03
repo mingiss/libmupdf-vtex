@@ -691,12 +691,13 @@ GLFW_SRC := \
 	win32_monitor.c \
 	win32_time.c \
 	win32_tls.c \
-	win32_window.c
+	win32_window.c \
+	../../platform/gl/gl-win32.c
 
 $(GLFW_OUT)/%.o: $(GLFW_DIR)/src/%.c | $(GLFW_OUT)
 	$(CC_CMD)
 $(GLFW_LIB): $(addprefix $(GLFW_OUT)/, $(GLFW_SRC:%.c=%.o))
-GLFW_LIBS := -lopengl32 -lgdi32 -L/d/kp/bin/VulkanSDK/1.2.182.0/Lib vulkan-1.lib -L/d/kp/bin/Qt/6.1.2/mingw81_64/lib -lQt6Gui
+GLFW_LIBS := -lopengl32 -lgdi32 -lcomdlg32 vulkan-1.lib
 
 endif
 
