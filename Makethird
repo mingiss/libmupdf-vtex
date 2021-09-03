@@ -651,6 +651,8 @@ GLFW_LIBS := -framework OpenGL -framework IOKit -framework CoreVideo -framework 
 
 else
 
+ifeq "$(OS)" "MACOS"
+
 GLFW_SRC := \
 	context.c \
 	egl_context.c \
@@ -673,6 +675,31 @@ $(GLFW_OUT)/%.o: $(GLFW_DIR)/src/%.c | $(GLFW_OUT)
 $(GLFW_LIB): $(addprefix $(GLFW_OUT)/, $(GLFW_SRC:%.c=%.o))
 GLFW_LIBS := -lGL -ldl -lX11 -lXcursor -lXrandr -lXinerama -lpthread
 
+else
+
+GLFW_SRC := \
+	context.c \
+	egl_context.c \
+	wgl_context.c \
+	init.c \
+	input.c \
+	monitor.c \
+	vulkan.c \
+	window.c \
+	win32_init.c \
+	win32_joystick.c \
+	win32_monitor.c \
+	win32_time.c \
+	win32_tls.c \
+	win32_window.c
+
+$(GLFW_OUT)/%.o: $(GLFW_DIR)/src/%.c | $(GLFW_OUT)
+	$(CC_CMD)
+$(GLFW_LIB): $(addprefix $(GLFW_OUT)/, $(GLFW_SRC:%.c=%.o))
+GLFW_LIBS := -lopengl32 -lgdi32 -L/d/kp/bin/VulkanSDK/1.2.182.0/Lib vulkan-1.lib -L/d/kp/bin/Qt/6.1.2/mingw81_64/lib -lQt6Gui
+
+endif
+
 endif
 
 GLFW_CFLAGS := -I$(GLFW_DIR)/include
@@ -684,12 +711,6 @@ GLFW_SRC_UNUSED := \
 	mir_monitor.c \
 	mir_window.c \
 	wgl_context.c \
-	win32_init.c \
-	win32_joystick.c \
-	win32_monitor.c \
-	win32_time.c \
-	win32_tls.c \
-	win32_window.c \
 	wl_init.c \
 	wl_monitor.c \
 	wl_window.c \
