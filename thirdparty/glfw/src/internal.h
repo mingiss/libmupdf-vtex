@@ -29,9 +29,9 @@
 #define _glfw3_internal_h_
 
 
-#if defined(_GLFW_USE_CONFIG_H)
+// #if defined(_GLFW_USE_CONFIG_H)
  #include "glfw_config.h"
-#endif
+// #endif
 
 #if defined(GLFW_INCLUDE_GLCOREARB) || \
     defined(GLFW_INCLUDE_ES1)       || \

@@ -1,4 +1,5 @@
 .hg*
+
 # Optional thirdparty libraryes
 thirdparty/luratech
 thirdparty/jpegxr
