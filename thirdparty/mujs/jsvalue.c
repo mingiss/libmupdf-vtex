@@ -9,10 +9,12 @@
 
 int jsV_numbertointeger(double n)
 {
-	double sign = n < 0 ? -1 : 1;
+	if (n == 0) return 0;
 	if (isnan(n)) return 0;
-	if (n == 0 || isinf(n)) return n;
-	return sign * floor(fabs(n));
+	n = (n < 0) ? -floor(-n) : floor(n);
+	if (n < INT_MIN) return INT_MIN;
+	if (n > INT_MAX) return INT_MAX;
+	return (int)n;
 }
 
 int jsV_numbertoint32(double n)
@@ -107,6 +109,9 @@ void jsV_toprimitive(js_State *J, js_Value *v, int preferred)
 		}
 	}
 
+	if (J->strict)
+		js_typeerror(J, "cannot convert object to primitive");
+
 	v->type = JS_TLITSTR;
 	v->u.litstr = "[object]";
 	return;
@@ -128,10 +133,17 @@ int jsV_toboolean(js_State *J, js_Value *v)
 	}
 }
 
-const char *js_itoa(char *out, int a)
+const char *js_itoa(char *out, int v)
 {
 	char buf[32], *s = out;
+	unsigned int a;
 	int i = 0;
+	if (v < 0) {
+		a = -v;
+		*s++ = '-';
+	} else {
+		a = v;
+	}
 	while (a) {
 		buf[i++] = (a % 10) + '0';
 		a /= 10;
@@ -220,16 +232,25 @@ double jsV_tointeger(js_State *J, js_Value *v)
 const char *jsV_numbertostring(js_State *J, char buf[32], double f)
 {
 	char digits[32], *p = buf, *s = digits;
-	int exp, neg, ndigits, point;
+	int exp, ndigits, point;
 
+	if (f == 0) return "0";
 	if (isnan(f)) return "NaN";
 	if (isinf(f)) return f < 0 ? "-Infinity" : "Infinity";
-	if (f == 0) return "0";
 
-	js_dtoa(f, digits, &exp, &neg, &ndigits);
+	/* Fast case for integers. This only works assuming all integers can be
+	 * exactly represented by a float. This is true for 32-bit integers and
+	 * 64-bit floats. */
+	if (f >= INT_MIN && f <= INT_MAX) {
+		int i = (int)f;
+		if ((double)i == f)
+			return js_itoa(buf, i);
+	}
+
+	ndigits = js_grisu2(f, digits, &exp);
 	point = ndigits + exp;
 
-	if (neg)
+	if (signbit(f))
 		*p++ = '-';
 
 	if (point < -5 || point > 21) {
@@ -291,8 +312,8 @@ const char *jsV_tostring(js_State *J, js_Value *v)
 				v->type = JS_TSHRSTR;
 				return v->u.shrstr;
 			} else {
-				v->type = JS_TMEMSTR;
 				v->u.memstr = jsV_newmemstring(J, p, n);
+				v->type = JS_TMEMSTR;
 				return v->u.memstr->p;
 			}
 		}
@@ -345,7 +366,9 @@ js_Object *jsV_toobject(js_State *J, js_Value *v)
 
 void js_newobjectx(js_State *J)
 {
-	js_Object *prototype = js_toobject(J, -1);
+	js_Object *prototype = NULL;
+	if (js_isobject(J, -1))
+		prototype = js_toobject(J, -1);
 	js_pop(J, 1);
 	js_pushobject(J, jsV_newobject(J, JS_COBJECT, prototype));
 }
@@ -353,6 +376,11 @@ void js_newobjectx(js_State *J)
 void js_newobject(js_State *J)
 {
 	js_pushobject(J, jsV_newobject(J, JS_COBJECT, J->Object_prototype));
+}
+
+void js_newarguments(js_State *J)
+{
+	js_pushobject(J, jsV_newobject(J, JS_CARGUMENTS, J->Object_prototype));
 }
 
 void js_newarray(js_State *J)
@@ -389,13 +417,13 @@ void js_newfunction(js_State *J, js_Function *fun, js_Environment *scope)
 			js_copy(J, -2);
 			js_defproperty(J, -2, "constructor", JS_DONTENUM);
 		}
-		js_defproperty(J, -2, "prototype", JS_DONTCONF);
+		js_defproperty(J, -2, "prototype", JS_DONTENUM | JS_DONTCONF);
 	}
 }
 
-void js_newscript(js_State *J, js_Function *fun, js_Environment *scope)
+void js_newscript(js_State *J, js_Function *fun, js_Environment *scope, int type)
 {
-	js_Object *obj = jsV_newobject(J, JS_CSCRIPT, NULL);
+	js_Object *obj = jsV_newobject(J, type, NULL);
 	obj->u.f.function = fun;
 	obj->u.f.scope = scope;
 	js_pushobject(J, obj);
@@ -417,7 +445,7 @@ void js_newcfunction(js_State *J, js_CFunction cfun, const char *name, int lengt
 			js_copy(J, -2);
 			js_defproperty(J, -2, "constructor", JS_DONTENUM);
 		}
-		js_defproperty(J, -2, "prototype", JS_DONTCONF);
+		js_defproperty(J, -2, "prototype", JS_DONTENUM | JS_DONTCONF);
 	}
 }
 
@@ -436,7 +464,7 @@ void js_newcconstructor(js_State *J, js_CFunction cfun, js_CFunction ccon, const
 		js_rot2(J); /* obj proto */
 		js_copy(J, -2); /* obj proto obj */
 		js_defproperty(J, -2, "constructor", JS_DONTENUM);
-		js_defproperty(J, -2, "prototype", JS_READONLY | JS_DONTENUM | JS_DONTCONF);
+		js_defproperty(J, -2, "prototype", JS_DONTENUM | JS_DONTCONF);
 	}
 }
 
@@ -564,12 +592,12 @@ retry:
 
 	if (x->type == JS_TBOOLEAN) {
 		x->type = JS_TNUMBER;
-		x->u.number = x->u.boolean;
+		x->u.number = x->u.boolean ? 1 : 0;
 		goto retry;
 	}
 	if (y->type == JS_TBOOLEAN) {
 		y->type = JS_TNUMBER;
-		y->u.number = y->u.boolean;
+		y->u.number = y->u.boolean ? 1 : 0;
 		goto retry;
 	}
 	if ((JSV_ISSTRING(x) || x->type == JS_TNUMBER) && y->type == JS_TOBJECT) {

@@ -4,12 +4,10 @@ public class Outline
 {
 	public String title;
 	public String uri;
-	public int page;
-	public Outline down[];
+	public Outline[] down;
 
-	public Outline(String title, int page, String uri, Outline[] down) {
+	public Outline(String title, String uri, Outline[] down) {
 		this.title = title;
-		this.page = page;
 		this.uri = uri;
 		this.down = down;
 	}
@@ -18,8 +16,6 @@ public class Outline
 	{
 		StringBuffer s = new StringBuffer();
 
-		s.append(page);
-		s.append(": ");
 		s.append(title);
 		s.append(' ');
 		s.append(uri);

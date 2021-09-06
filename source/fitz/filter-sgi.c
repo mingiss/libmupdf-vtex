@@ -1,6 +1,7 @@
-#include "mupdf/fitz/system.h"
-#include "mupdf/fitz/context.h"
-#include "mupdf/fitz/stream.h"
+#include "mupdf/fitz.h"
+
+#include <math.h>
+#include <string.h>
 
 /* Table stolen from LibTiff */
 #define UV_SQSIZ	0.003500f
@@ -179,20 +180,14 @@ static struct {
 	{ 0.023659f,	21,	16268 },
 };
 
-#ifndef	M_LN2
-#define M_LN2		0.69314718055994530942
-#endif
-
 /* SGI Log 16bit (greyscale) */
 
-typedef struct fz_sgilog16_s fz_sgilog16;
-
-struct fz_sgilog16_s
+typedef struct
 {
 	fz_stream *chain;
 	int run, n, c, w;
 	uint16_t *temp;
-};
+} fz_sgilog16;
 
 static inline int
 sgilog16val(fz_context *ctx, uint16_t v)
@@ -205,7 +200,7 @@ sgilog16val(fz_context *ctx, uint16_t v)
 		Y = 0;
 	else
 	{
-		Y = expf(M_LN2/256 * (Le + .5f) - M_LN2*64);
+		Y = expf(FZ_LN2/256 * (Le + .5f) - FZ_LN2*64);
 		if (v & 0x8000)
 			Y = -Y;
 	}
@@ -314,24 +309,21 @@ close_sgilog16(fz_context *ctx, void *state_)
 fz_stream *
 fz_open_sgilog16(fz_context *ctx, fz_stream *chain, int w)
 {
-	fz_sgilog16 *state = NULL;
-
-	fz_var(state);
+	fz_sgilog16 *state = fz_malloc_struct(ctx, fz_sgilog16);
 
 	fz_try(ctx)
 	{
-		state = fz_malloc_struct(ctx, fz_sgilog16);
-		state->chain = chain;
 		state->run = 0;
 		state->n = 0;
 		state->c = 0;
 		state->w = w;
-		state->temp = fz_malloc(ctx, w * sizeof(uint16_t));
+		state->temp = Memento_label(fz_malloc(ctx, w * sizeof(uint16_t)), "sgilog16_temp");
+		state->chain = fz_keep_stream(ctx, chain);
 	}
 	fz_catch(ctx)
 	{
+		fz_free(ctx, state->temp);
 		fz_free(ctx, state);
-		fz_drop_stream(ctx, chain);
 		fz_rethrow(ctx);
 	}
 
@@ -340,14 +332,12 @@ fz_open_sgilog16(fz_context *ctx, fz_stream *chain, int w)
 
 /* SGI Log 24bit (LUV) */
 
-typedef struct fz_sgilog24_s fz_sgilog24;
-
-struct fz_sgilog24_s
+typedef struct
 {
 	fz_stream *chain;
 	int err, w;
 	uint8_t *temp;
-};
+} fz_sgilog24;
 
 static int
 uv_decode(float *up, float *vp, int c)	/* decode (u',v') index */
@@ -400,7 +390,7 @@ sgilog24val(fz_context *ctx, fz_stream *chain, uint8_t *rgb)
 
 	/* decode luminance */
 	p = (luv>>14) & 0x3ff;
-	Y = (p == 0 ? 0 : expf(M_LN2/64*(p+.5f) - M_LN2*12));
+	Y = (p == 0 ? 0 : expf(FZ_LN2/64*(p+.5f) - FZ_LN2*12));
 	if (Y <= 0)
 	{
 		X = Y = Z = 0;
@@ -484,22 +474,19 @@ close_sgilog24(fz_context *ctx, void *state_)
 fz_stream *
 fz_open_sgilog24(fz_context *ctx, fz_stream *chain, int w)
 {
-	fz_sgilog24 *state = NULL;
-
-	fz_var(state);
+	fz_sgilog24 *state = fz_malloc_struct(ctx, fz_sgilog24);
 
 	fz_try(ctx)
 	{
-		state = fz_malloc_struct(ctx, fz_sgilog24);
-		state->chain = chain;
 		state->err = 0;
 		state->w = w;
-		state->temp = fz_malloc(ctx, w * 3);
+		state->temp = Memento_label(fz_malloc(ctx, w * 3), "sgilog24_temp");
+		state->chain = fz_keep_stream(ctx, chain);
 	}
 	fz_catch(ctx)
 	{
+		fz_free(ctx, state->temp);
 		fz_free(ctx, state);
-		fz_drop_stream(ctx, chain);
 		fz_rethrow(ctx);
 	}
 
@@ -508,14 +495,12 @@ fz_open_sgilog24(fz_context *ctx, fz_stream *chain, int w)
 
 /* SGI Log 32bit */
 
-typedef struct fz_sgilog32_s fz_sgilog32;
-
-struct fz_sgilog32_s
+typedef struct
 {
 	fz_stream *chain;
 	int run, n, c, w;
 	uint32_t *temp;
-};
+} fz_sgilog32;
 
 static inline void
 sgilog32val(fz_context *ctx, uint32_t p, uint8_t *rgb)
@@ -531,7 +516,7 @@ sgilog32val(fz_context *ctx, uint32_t p, uint8_t *rgb)
 	else
 	{
 		int Le = (p>>16) & 0x7fff;
-		Y = !Le ? 0 : expf(M_LN2/256*(Le+.5f) - M_LN2*64);
+		Y = !Le ? 0 : expf(FZ_LN2/256*(Le+.5f) - FZ_LN2*64);
 		/* decode color */
 		u = (1.f/UVSCALE) * ((p>>8 & 0xff) + .5f);
 		v = (1.f/UVSCALE) * ((p & 0xff) + .5f);
@@ -648,36 +633,29 @@ static void
 close_sgilog32(fz_context *ctx, void *state_)
 {
 	fz_sgilog32 *state = (fz_sgilog32 *)state_;
-	fz_stream *chain = state->chain;
-
+	fz_drop_stream(ctx, state->chain);
 	fz_free(ctx, state->temp);
 	fz_free(ctx, state);
-	fz_drop_stream(ctx, chain);
 }
 
 fz_stream *
 fz_open_sgilog32(fz_context *ctx, fz_stream *chain, int w)
 {
-	fz_sgilog32 *state = NULL;
-
-	fz_var(state);
-
+	fz_sgilog32 *state = fz_malloc_struct(ctx, fz_sgilog32);
 	fz_try(ctx)
 	{
-		state = fz_malloc_struct(ctx, fz_sgilog32);
-		state->chain = chain;
 		state->run = 0;
 		state->n = 0;
 		state->c = 0;
 		state->w = w;
-		state->temp = fz_malloc(ctx, w * sizeof(uint32_t));
+		state->temp = Memento_label(fz_malloc(ctx, w * sizeof(uint32_t)), "sgilog32_temp");
+		state->chain = fz_keep_stream(ctx, chain);
 	}
 	fz_catch(ctx)
 	{
+		fz_free(ctx, state->temp);
 		fz_free(ctx, state);
-		fz_drop_stream(ctx, chain);
 		fz_rethrow(ctx);
 	}
-
 	return fz_new_stream(ctx, state, next_sgilog32, close_sgilog32);
 }

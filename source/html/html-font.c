@@ -1,4 +1,7 @@
-#include "mupdf/html.h"
+#include "mupdf/fitz.h"
+#include "html-imp.h"
+
+#include <string.h>
 
 static fz_font *
 fz_load_html_default_font(fz_context *ctx, fz_html_font_set *set, const char *family, int is_bold, int is_italic)
@@ -10,7 +13,7 @@ fz_load_html_default_font(fz_context *ctx, fz_html_font_set *set, const char *fa
 	int idx = (is_mono ? 8 : is_sans ? 4 : 0) + is_bold * 2 + is_italic;
 	if (!set->fonts[idx])
 	{
-		const char *data;
+		const unsigned char *data;
 		int size;
 
 		data = fz_lookup_builtin_font(ctx, real_family, is_bold, is_italic, &size);
@@ -26,8 +29,8 @@ fz_load_html_default_font(fz_context *ctx, fz_html_font_set *set, const char *fa
 
 void
 fz_add_html_font_face(fz_context *ctx, fz_html_font_set *set,
-	const char *family, int is_bold, int is_italic, const char *src,
-	fz_font *font)
+	const char *family, int is_bold, int is_italic, int is_small_caps,
+	const char *src, fz_font *font)
 {
 	fz_html_font_face *custom = fz_malloc_struct(ctx, fz_html_font_face);
 	custom->font = fz_keep_font(ctx, font);
@@ -35,26 +38,38 @@ fz_add_html_font_face(fz_context *ctx, fz_html_font_set *set,
 	custom->family = fz_strdup(ctx, family);
 	custom->is_bold = is_bold;
 	custom->is_italic = is_italic;
+	custom->is_small_caps = is_small_caps;
 	custom->next = set->custom;
 	set->custom = custom;
 }
 
 fz_font *
-fz_load_html_font(fz_context *ctx, fz_html_font_set *set, const char *family, int is_bold, int is_italic)
+fz_load_html_font(fz_context *ctx, fz_html_font_set *set,
+	const char *family, int is_bold, int is_italic, int is_small_caps)
 {
 	fz_html_font_face *custom;
-	const char *data;
+	const unsigned char *data;
+	int best_score = 0;
+	fz_font *best_font = NULL;
 	int size;
 
 	for (custom = set->custom; custom; custom = custom->next)
 	{
-		if (!strcmp(family, custom->family) &&
-				is_bold == custom->is_bold &&
-				is_italic == custom->is_italic)
+		if (!strcmp(family, custom->family))
 		{
-			return custom->font;
+			int score =
+				1 * (is_bold == custom->is_bold) +
+				2 * (is_italic == custom->is_italic) +
+				4 * (is_small_caps == custom->is_small_caps);
+			if (score > best_score)
+			{
+				best_score = score;
+				best_font = custom->font;
+			}
 		}
 	}
+	if (best_font)
+		return best_font;
 
 	data = fz_lookup_builtin_font(ctx, family, is_bold, is_italic, &size);
 	if (data)
@@ -65,7 +80,7 @@ fz_load_html_font(fz_context *ctx, fz_html_font_set *set, const char *family, in
 			flags->fake_bold = 1;
 		if (is_italic && !flags->is_italic)
 			flags->fake_italic = 1;
-		fz_add_html_font_face(ctx, set, family, is_bold, is_italic, "<builtin>", font);
+		fz_add_html_font_face(ctx, set, family, is_bold, is_italic, 0, "<builtin>", font);
 		fz_drop_font(ctx, font);
 		return font;
 	}
@@ -100,7 +115,7 @@ void fz_drop_html_font_set(fz_context *ctx, fz_html_font_set *set)
 		font = next;
 	}
 
-	for (i = 0; i < nelem(set->fonts); ++i)
+	for (i = 0; i < (int)nelem(set->fonts); ++i)
 		fz_drop_font(ctx, set->fonts[i]);
 
 	fz_free(ctx, set);

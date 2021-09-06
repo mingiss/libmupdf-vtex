@@ -34,7 +34,7 @@ load_error(void *cookie, MuOfficeDocErrorType error)
 
 static void render_progress(void *cookie, MuError error)
 {
-	assert((int)cookie == 5678);
+	assert((intptr_t)cookie == 5678);
 
 	fprintf(stderr, "render_progress: error=%d\n", error);
 	(void)ReleaseSemaphore(loaded, 1, NULL);
@@ -89,8 +89,8 @@ test_async(MuOfficeLib *mu)
 	fprintf(stderr, "Page size = %g x %g\n", w, h);
 
 	/* Allocate ourselves a bitmap */
-	bitmap.width = (int)(w * 1.5 + 0.5);
-	bitmap.height = (int)(h * 1.5 + 0.5);
+	bitmap.width = (int)(w * 1.5f + 0.5f);
+	bitmap.height = (int)(h * 1.5f + 0.5f);
 	bitmap.lineSkip = bitmap.width * 4;
 	bitmap.memptr = malloc(bitmap.lineSkip * bitmap.height);
 
@@ -99,8 +99,8 @@ test_async(MuOfficeLib *mu)
 	area.origin.y = 0;
 	area.renderArea.x = 0;
 	area.renderArea.y = 0;
-	area.renderArea.width = (float)bitmap.width;
-	area.renderArea.height = (float)bitmap.height;
+	area.renderArea.width = bitmap.width;
+	area.renderArea.height = bitmap.height;
 
 	/* Render into the bitmap */
 	err = MuOfficePage_render(page, 1.5f, &bitmap, &area, render_progress, (void *)5678, &render);
@@ -178,8 +178,8 @@ test_sync(MuOfficeLib *mu)
 	fprintf(stderr, "Page size = %g x %g\n", w, h);
 
 	/* Allocate ourselves a bitmap */
-	bitmap.width = (int)(w * 1.5 + 0.5);
-	bitmap.height = (int)(h * 1.5 + 0.5);
+	bitmap.width = (int)(w * 1.5f + 0.5f);
+	bitmap.height = (int)(h * 1.5f + 0.5f);
 	bitmap.lineSkip = bitmap.width * 4;
 	bitmap.memptr = malloc(bitmap.lineSkip * bitmap.height);
 
@@ -188,8 +188,8 @@ test_sync(MuOfficeLib *mu)
 	area.origin.y = 0;
 	area.renderArea.x = 0;
 	area.renderArea.y = 0;
-	area.renderArea.width = (float)bitmap.width;
-	area.renderArea.height = (float)bitmap.height;
+	area.renderArea.width = bitmap.width;
+	area.renderArea.height = bitmap.height;
 
 	/* Render into the bitmap */
 	err = MuOfficePage_render(page, 1.5f, &bitmap, &area, NULL, NULL, &render);
@@ -267,10 +267,10 @@ save_png(const MuOfficeBitmap *bitmap, const char *filename)
 		exit(EXIT_FAILURE);
 	}
 
+	pix = fz_new_pixmap_with_data(ctx, fz_device_rgb(ctx), bitmap->width, bitmap->height, NULL, 1, bitmap->lineSkip, bitmap->memptr);
+
 	fz_try(ctx)
 	{
-		pix = fz_new_pixmap_with_data(ctx, fz_device_rgb(ctx), bitmap->width, bitmap->height, 1, bitmap->lineSkip, bitmap->memptr);
-
 		fz_save_pixmap_as_png(ctx, pix, filename);
 	}
 	fz_always(ctx)

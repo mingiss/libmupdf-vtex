@@ -2,11 +2,25 @@
 <html>
 <head>
 <link href="style.css" rel="stylesheet">
-<title>MuJS: reference manual</title>
+<title>MuJS Reference</title>
 </head>
+
 <body>
 
-<h1>MuJS Reference Manual</h1>
+<header>
+<h1>MuJS Reference</h1>
+</header>
+
+<nav>
+<a href="introduction.html">Introduction</a>
+<a href="reference.html">Reference</a>
+<a href="examples.html">Examples</a>
+<a href="license.html">License</a>
+<a href="http://git.ghostscript.com/?p=mujs.git;a=summary">Source</a>
+<a href="https://bugs.ghostscript.com/">Bugs</a>
+</nav>
+
+<article>
 
 <h2>Introduction</h2>
 
@@ -47,7 +61,19 @@ Custom properties on userdata objects can be implemented using getter and setter
 Numbers are represented using double precision floating point values.
 
 <p>
-Strings in the C interface are zero-terminated byte arrays in UTF-8 encoding.
+Strings in the C interface are zero-terminated byte arrays in WTF-8 encoding.
+This allows both arbitrary 16-bit values (as required by Javascript) and also
+extended code points for the full 21-bit Unicode range.
+These extended characters will mostly work as expected in Javascript.
+
+<p>
+If you have Javascript code that expects to work with UTF-16 surrogate pairs,
+you will need to manually convert any extended characters to surrogate pairs
+and back when passing strings between C and Javascript.
+
+<p>
+The U+0000 character is encoded as the two-byte sequence <C0 80>, same as in
+modified UTF-8.
 
 <h3>Environments</h3>
 
@@ -88,7 +114,8 @@ Collection is automatically triggered when enough allocations have accumulated.
 You can also force a collection pass from C.
 
 <p>
-TODO: garbage collection of userdata.
+Userdata objects have an associated C finalizer function that is called when
+the corresponding object is freed.
 
 <h3>The Stack</h3>
 
@@ -165,6 +192,22 @@ js_Panic js_atpanic(js_State *J, js_Panic panic);
 
 Set a new panic function, and return the old one.
 
+<h3>Report</h3>
+
+<pre>
+typedef void (*js_Report)(js_State *J, const char *message);
+
+void js_setreport(js_State *J, js_Report report);
+</pre>
+
+<p>
+Set a callback function for reporting various warnings
+and garbage collection statistics.
+
+<p>
+The report function must <i>not</i> throw an exception
+or call any other MuJS function except js_getcontext().
+
 <h3>Garbage collection</h3>
 
 <pre>
@@ -173,7 +216,8 @@ js_gc(js_State *J, int report);
 
 <p>
 Force a garbage collection pass.
-If the report argument is non-zero, print a summary of garbage collection statistics to stdout.
+If the report argument is non-zero, send a summary of garbage collection statistics to
+the report callback function.
 
 <h3>Loading and compiling scripts</h3>
 
@@ -249,7 +293,7 @@ int js_dostring(js_State *J, const char *source);
 
 <p>
 Compile and execute the script in the zero-terminated string in source argument.
-If any errors occur, print the error message to stderr and return 1.
+If any errors occur, call the report callback function and return 1.
 Return 0 on success.
 
 <pre>
@@ -258,7 +302,7 @@ int js_dofile(js_State *J, const char *filename);
 
 <p>
 Load the script from the file with the given filename, then compile and execute it.
-If any errors occur, print the error message to stderr and return 1.
+If any errors occur, call the report callback function and return 1.
 Return 0 on success.
 
 <h3>Protected environments</h3>
@@ -280,7 +324,7 @@ Use the following example as a guide for how to use js_try:
 
 <pre>
 if (js_try(J)) {
-	fprintf(stderr, "error: %s", js_tostring(J, -1));
+	fprintf(stderr, "error: %s", js_trystring(J, -1, "Error"));
 	js_pop(J, 1);
 	return;
 }
@@ -332,13 +376,12 @@ Wrapper to push a new error object on the stack using a printf formatting string
 
 <pre>
 int js_gettop(js_State *J);
-void js_settop(js_State *J, int idx); -- not implemented yet
 void js_pop(js_State *J, int n);
 void js_rot(js_State *J, int n);
 void js_copy(js_State *J, int idx);
 void js_remove(js_State *J, int idx);
-void js_insert(js_State *J, int idx); -- not implemented yet
-void js_replace(js_State* J, int idx); -- not implemented yet
+void js_insert(js_State *J, int idx);
+void js_replace(js_State* J, int idx);
 </pre>
 
 <h3>Comparisons and arithmetic</h3>
@@ -389,7 +432,7 @@ Test if a primitive value is of a given type.
 <pre>
 int js_toboolean(js_State *J, int idx);
 double js_tonumber(js_State *J, int idx);
-double js_tointeger(js_State *J, int idx);
+int js_tointeger(js_State *J, int idx);
 int js_toint32(js_State *J, int idx);
 unsigned int js_touint32(js_State *J, int idx);
 short js_toint16(js_State *J, int idx);
@@ -407,6 +450,19 @@ The conversion may <i>change the actual value in the stack</i>!
 <p>
 There is no guarantee that the pointer returned by js_tostring will be valid after
 the corresponding value is removed from the stack.
+
+<p>
+Note that the toString and valueOf methods that may be invoked by these functions
+can throw exceptions. If you want to catch and ignore exceptions, use the following
+functions instead. The 'error' argument is the default value that will be returned
+if a toString/valueOf method throws an exception.
+
+<pre>
+int js_tryboolean(js_State *J, int idx, int error);
+double js_trynumber(js_State *J, int idx, double error);
+int js_tryinteger(js_State *J, int idx, int error);
+const char *js_trystring(js_State *J, int idx, const char *error);
+</pre>
 
 <h3>Objects</h3>
 
@@ -426,7 +482,7 @@ void js_newregexp(js_State *J, const char *pattern, int flags);
 </pre>
 
 <p>
-Creat and push objects on the stack.
+Create and push objects on the stack.
 
 <pre>
 int js_isobject(js_State *J, int idx);
@@ -573,13 +629,38 @@ Push the currently executing function object.
 <h3>Userdata</h3>
 
 <pre>
-void js_newuserdata(js_State *J, const char *tag, void *data);
+typedef void (*js_Finalize)(js_State *J, void *data);
+typedef int (*js_HasProperty)(js_State *J, void *data, const char *name);
+typedef int (*js_Put)(js_State *J, void *data, const char *name);
+typedef int (*js_Delete)(js_State *J, void *data, const char *name);
+
+void js_newuserdata(js_State *J, const char *tag, void *data,
+	js_Finalize finalize);
+
+void js_newuserdatax(js_State *J, const char *tag, void *data,
+	js_HasProperty has,
+	js_Put put,
+	js_Delete delete,
+	js_Finalize finalize);
 </pre>
 
 <p>
 Pop an object from the top of the stack to use as the internal prototype property for the new object.
 Push a new userdata object wrapping a pointer to C memory.
 The userdata object is tagged using a string, to represent the type of the C memory.
+
+<p>
+The finalize callback, if it is not NULL, will be called when the object is
+freed by the garbage collector.
+
+<p>
+The extended function also has callback functions for overriding property accesses.
+If these are set, they can be used to override accesses to certain properties.
+Any property accesses that are not overridden will be handled as usual in the runtime.
+The "HasProperty" callback should push a value and return true if it wants to
+handle the property, otherwise it should do nothing and return false. "Put"
+should read the top value and return true if it wants to handle the property.
+Likewise, "Delete" should return true if it wants to handle the property.
 
 <pre>
 int js_isuserdata(js_State *J, int idx, const char *tag);
@@ -627,4 +708,12 @@ void js_unref(js_State *J, const char *ref);
 <p>
 WIP: Delete the reference from the registry.
 
+</article>
+
+<footer>
+<a href="http://artifex.com"><img src="artifex-logo.png" align="right"></a>
+Copyright &copy; 2013-2017 Artifex Software Inc.
+</footer>
+
 </body>
+</html>

@@ -6,6 +6,8 @@
 #include "mupdf/fitz.h"
 #include "bidi-imp.h"
 
+#include <assert.h>
+
 #ifndef TRUE
 #define TRUE (1)
 #endif
@@ -367,9 +369,9 @@ void set_deferred_level_run(fz_bidi_level *pval, size_t cval, size_t iStart, fz_
 			or at the end of the input text.
 
 ------------------------------------------------------------------------*/
-int fz_bidi_resolve_paragraphs(fz_bidi_chartype *types, int cch)
+size_t fz_bidi_resolve_paragraphs(fz_bidi_chartype *types, size_t cch)
 {
-	int ich;
+	size_t ich;
 
 	// skip characters not of type B
 	for(ich = 0; ich < cch && types[ich] != BDI_B; ich++)
@@ -720,7 +722,7 @@ void fz_bidi_resolve_weak(fz_context *ctx, fz_bidi_level baselevel, fz_bidi_char
 	for (ich = 0; ich < cch; ich++)
 	{
 		if (pcls[ich] > BDI_BN) {
-			fz_warn(ctx, "error: pcls[" FMT_zu "] > BN (%d)\n", ich, pcls[ich]);
+			fz_warn(ctx, "error: pcls[%zu] > BN (%d)\n", ich, pcls[ich]);
 		}
 
 		// ignore boundary neutrals

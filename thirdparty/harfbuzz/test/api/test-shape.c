@@ -41,9 +41,9 @@
 static const char test_data[] = "test\0data";
 
 static hb_position_t
-glyph_h_advance_func (hb_font_t *font, void *font_data,
+glyph_h_advance_func (hb_font_t *font HB_UNUSED, void *font_data HB_UNUSED,
 		      hb_codepoint_t glyph,
-		      void *user_data)
+		      void *user_data HB_UNUSED)
 {
   switch (glyph) {
   case 1: return 10;
@@ -54,10 +54,10 @@ glyph_h_advance_func (hb_font_t *font, void *font_data,
 }
 
 static hb_bool_t
-glyph_func (hb_font_t *font, void *font_data,
-	    hb_codepoint_t unicode, hb_codepoint_t variant_selector,
+glyph_func (hb_font_t *font HB_UNUSED, void *font_data HB_UNUSED,
+	    hb_codepoint_t unicode,
 	    hb_codepoint_t *glyph,
-	    void *user_data)
+	    void *user_data HB_UNUSED)
 {
   switch (unicode) {
   case 'T': *glyph = 1; return TRUE;
@@ -67,44 +67,15 @@ glyph_func (hb_font_t *font, void *font_data,
   return FALSE;
 }
 
-static hb_position_t
-glyph_h_kerning_func (hb_font_t *font, void *font_data,
-		      hb_codepoint_t left, hb_codepoint_t right,
-		      void *user_data)
-{
-  if (left == 1 && right == 2)
-    return -2;
-
-  return 0;
-}
-
 static const char TesT[] = "TesT";
 
 static void
-test_shape (void)
+test_font (hb_font_t *font)
 {
-  hb_blob_t *blob;
-  hb_face_t *face;
-  hb_font_funcs_t *ffuncs;
-  hb_font_t *font;
   hb_buffer_t *buffer;
   unsigned int len;
   hb_glyph_info_t *glyphs;
   hb_glyph_position_t *positions;
-
-  blob = hb_blob_create (test_data, sizeof (test_data), HB_MEMORY_MODE_READONLY, NULL, NULL);
-  face = hb_face_create (blob, 0);
-  hb_blob_destroy (blob);
-  font = hb_font_create (face);
-  hb_face_destroy (face);
-  hb_font_set_scale (font, 10, 10);
-
-  ffuncs = hb_font_funcs_create ();
-  hb_font_funcs_set_glyph_h_advance_func (ffuncs, glyph_h_advance_func, NULL, NULL);
-  hb_font_funcs_set_glyph_func (ffuncs, glyph_func, malloc (10), free);
-  hb_font_funcs_set_glyph_h_kerning_func (ffuncs, glyph_h_kerning_func, NULL, NULL);
-  hb_font_set_funcs (font, ffuncs, NULL, NULL);
-  hb_font_funcs_destroy (ffuncs);
 
   buffer =  hb_buffer_create ();
   hb_buffer_set_direction (buffer, HB_DIRECTION_LTR);
@@ -118,8 +89,8 @@ test_shape (void)
 
   {
     const hb_codepoint_t output_glyphs[] = {1, 2, 3, 1};
-    const hb_position_t output_x_advances[] = {9, 5, 5, 10};
-    const hb_position_t output_x_offsets[] = {0, -1, 0, 0};
+    const hb_position_t output_x_advances[] = {10, 6, 5, 10};
+    const hb_position_t output_x_offsets[] = {0, 0, 0, 0};
     unsigned int i;
     g_assert_cmpint (len, ==, 4);
     for (i = 0; i < len; i++) {
@@ -135,6 +106,35 @@ test_shape (void)
   }
 
   hb_buffer_destroy (buffer);
+}
+
+static void
+test_shape (void)
+{
+  hb_blob_t *blob;
+  hb_face_t *face;
+  hb_font_funcs_t *ffuncs;
+  hb_font_t *font, *sub_font;
+
+  blob = hb_blob_create (test_data, sizeof (test_data), HB_MEMORY_MODE_READONLY, NULL, NULL);
+  face = hb_face_create (blob, 0);
+  hb_blob_destroy (blob);
+  font = hb_font_create (face);
+  hb_face_destroy (face);
+  hb_font_set_scale (font, 10, 10);
+
+  ffuncs = hb_font_funcs_create ();
+  hb_font_funcs_set_glyph_h_advance_func (ffuncs, glyph_h_advance_func, NULL, NULL);
+  hb_font_funcs_set_nominal_glyph_func (ffuncs, glyph_func, malloc (10), free);
+  hb_font_set_funcs (font, ffuncs, NULL, NULL);
+  hb_font_funcs_destroy (ffuncs);
+
+  test_font (font);
+
+  sub_font = hb_font_create_sub_font (font);
+  test_font (sub_font);
+
+  hb_font_destroy (sub_font);
   hb_font_destroy (font);
 }
 
@@ -154,7 +154,7 @@ test_shape_clusters (void)
   buffer =  hb_buffer_create ();
   hb_buffer_set_direction (buffer, HB_DIRECTION_LTR);
   {
-    /* https://code.google.com/p/chromium/issues/detail?id=497578 */
+    /* https://crbug.com/497578 */
     hb_codepoint_t test[] = {0xFFF1, 0xF0B6};
     hb_buffer_add_utf32 (buffer, test, 2, 0, 2);
   }

@@ -1,4 +1,7 @@
-#include "fitz-imp.h"
+#include "mupdf/fitz.h"
+
+#include <string.h>
+#include <stdarg.h>
 
 fz_buffer *
 fz_new_buffer(fz_context *ctx, size_t size)
@@ -11,7 +14,7 @@ fz_new_buffer(fz_context *ctx, size_t size)
 	b->refs = 1;
 	fz_try(ctx)
 	{
-		b->data = fz_malloc(ctx, size);
+		b->data = Memento_label(fz_malloc(ctx, size), "fz_buffer_data");
 	}
 	fz_catch(ctx)
 	{
@@ -28,7 +31,7 @@ fz_new_buffer(fz_context *ctx, size_t size)
 fz_buffer *
 fz_new_buffer_from_data(fz_context *ctx, unsigned char *data, size_t size)
 {
-	fz_buffer *b;
+	fz_buffer *b = NULL;
 
 	fz_try(ctx)
 	{
@@ -49,7 +52,7 @@ fz_new_buffer_from_data(fz_context *ctx, unsigned char *data, size_t size)
 }
 
 fz_buffer *
-fz_new_buffer_from_shared_data(fz_context *ctx, const char *data, size_t size)
+fz_new_buffer_from_shared_data(fz_context *ctx, const unsigned char *data, size_t size)
 {
 	fz_buffer *b;
 
@@ -65,10 +68,19 @@ fz_new_buffer_from_shared_data(fz_context *ctx, const char *data, size_t size)
 }
 
 fz_buffer *
+fz_new_buffer_from_copied_data(fz_context *ctx, const unsigned char *data, size_t size)
+{
+	fz_buffer *b = fz_new_buffer(ctx, size);
+	b->len = size;
+	memcpy(b->data, data, size);
+	return b;
+}
+
+fz_buffer *
 fz_new_buffer_from_base64(fz_context *ctx, const char *data, size_t size)
 {
 	fz_buffer *buf = fz_new_buffer(ctx, size);
-	const char *end = data + size;
+	const char *end = data + (size > 0 ? size : strlen(data));
 	const char *s = data;
 	fz_try(ctx)
 	{
@@ -117,7 +129,7 @@ fz_resize_buffer(fz_context *ctx, fz_buffer *buf, size_t size)
 {
 	if (buf->shared)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot resize a buffer with shared storage");
-	buf->data = fz_resize_array(ctx, buf->data, size, 1);
+	buf->data = fz_realloc(ctx, buf->data, size);
 	buf->cap = size;
 	if (buf->len > buf->cap)
 		buf->len = buf->cap;
@@ -150,6 +162,12 @@ fz_trim_buffer(fz_context *ctx, fz_buffer *buf)
 {
 	if (buf->cap > buf->len+1)
 		fz_resize_buffer(ctx, buf, buf->len);
+}
+
+void
+fz_clear_buffer(fz_context *ctx, fz_buffer *buf)
+{
+	buf->len = 0;
 }
 
 void
@@ -197,7 +215,7 @@ fz_append_buffer(fz_context *ctx, fz_buffer *buf, fz_buffer *extra)
 {
 	if (buf->cap - buf->len < extra->len)
 	{
-		buf->data = fz_resize_array(ctx, buf->data, buf->len + extra->len, 1);
+		buf->data = fz_realloc(ctx, buf->data, buf->len + extra->len);
 		buf->cap = buf->len + extra->len;
 	}
 
@@ -245,6 +263,22 @@ fz_append_rune(fz_context *ctx, fz_buffer *buf, int c)
 	memcpy(buf->data + buf->len, data, len);
 	buf->len += len;
 	buf->unused_bits = 0;
+}
+
+void
+fz_append_int32_be(fz_context *ctx, fz_buffer *buf, int x)
+{
+	fz_append_byte(ctx, buf, (x >> 24) & 0xFF);
+	fz_append_byte(ctx, buf, (x >> 16) & 0xFF);
+	fz_append_byte(ctx, buf, (x >> 8) & 0xFF);
+	fz_append_byte(ctx, buf, (x) & 0xFF);
+}
+
+void
+fz_append_int16_be(fz_context *ctx, fz_buffer *buf, int x)
+{
+	fz_append_byte(ctx, buf, (x >> 8) & 0xFF);
+	fz_append_byte(ctx, buf, (x) & 0xFF);
 }
 
 void
@@ -432,7 +466,8 @@ fz_md5_buffer(fz_context *ctx, fz_buffer *buffer, unsigned char digest[16])
 {
 	fz_md5 state;
 	fz_md5_init(&state);
-	fz_md5_update(&state, buffer->data, buffer->len);
+	if (buffer)
+		fz_md5_update(&state, buffer->data, buffer->len);
 	fz_md5_final(&state, digest);
 }
 

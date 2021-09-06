@@ -1,5 +1,9 @@
 #include "mupdf/fitz.h"
 
+#include <assert.h>
+#include <errno.h>
+#include <float.h>
+
 #ifndef INFINITY
 #define INFINITY (DBL_MAX+DBL_MAX)
 #endif
@@ -14,7 +18,7 @@
    The implementation uses a self-made floating point type, 'strtof_fp_t', with
    a 32-bit significand. The steps of the algorithm are
 
-   INPUT: Up to 9 decimal digits d1 , ... d9 and an exponent dexp.
+   INPUT: Up to 9 decimal digits d1, ... d9 and an exponent dexp.
    OUTPUT: A float corresponding to the number d1 ... d9 * 10^dexp.
 
    1) Convert the integer d1 ... d9 to an strtof_fp_t x.
@@ -328,8 +332,8 @@ starts_with(const char **s, const char *string)
 			*tailptr = (char *) s;	\
 	while (0)
 
-static float
-strtof_internal(const char *string, char **tailptr, int exp_format)
+float
+fz_strtof(const char *string, char **tailptr)
 {
 	/* FIXME: error (1/2 + 1/256) ulp  */
 	const char *s;
@@ -417,7 +421,7 @@ strtof_internal(const char *string, char **tailptr, int exp_format)
 	}
 
 	/* Parse exponent. */
-	if (exp_format && (*s == 'e' || *s == 'E'))
+	if (*s == 'e' || *s == 'E')
 	{
 		int exp_negative = 0;
 		int exp = 0;
@@ -452,16 +456,4 @@ strtof_internal(const char *string, char **tailptr, int exp_format)
 
 	SET_TAILPTR(tailptr, s);
 	return scale_integer_to_float(M, N, negative);
-}
-
-float
-fz_strtof(const char *string, char **tailptr)
-{
-	return strtof_internal(string, tailptr, 1);
-}
-
-float
-fz_strtof_no_exp(const char *string, char **tailptr)
-{
-	return strtof_internal(string, tailptr, 0);
 }

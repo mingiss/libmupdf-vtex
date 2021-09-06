@@ -2,13 +2,16 @@ package com.artifex.mupdf.fitz;
 
 public class Image
 {
+	static {
+		Context.init();
+	}
+
 	protected long pointer;
 
 	protected native void finalize();
 
 	public void destroy() {
 		finalize();
-		pointer = 0;
 	}
 
 	private native long newNativeFromPixmap(Pixmap pixmap);

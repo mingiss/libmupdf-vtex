@@ -4,12 +4,16 @@
 
 #include "mupdf/fitz.h"
 
+#include <string.h>
+#include <stdio.h>
+
 #ifdef _MSC_VER
 #define main main_utf8
 #endif
 
 int muconvert_main(int argc, char *argv[]);
 int mudraw_main(int argc, char *argv[]);
+int mutrace_main(int argc, char *argv[]);
 int murun_main(int argc, char *argv[]);
 
 int pdfclean_main(int argc, char *argv[]);
@@ -20,28 +24,42 @@ int pdfshow_main(int argc, char *argv[]);
 int pdfpages_main(int argc, char *argv[]);
 int pdfcreate_main(int argc, char *argv[]);
 int pdfmerge_main(int argc, char *argv[]);
-int pdfportfolio_main(int argc, char *argv[]);
+int pdfsign_main(int argc, char *argv[]);
+
+int cmapdump_main(int argc, char *argv[]);
 
 static struct {
 	int (*func)(int argc, char *argv[]);
 	char *name;
 	char *desc;
 } tools[] = {
+#if FZ_ENABLE_PDF
+	{ pdfclean_main, "clean", "rewrite pdf file" },
+#endif
 	{ muconvert_main, "convert", "convert document" },
+#if FZ_ENABLE_PDF
+	{ pdfcreate_main, "create", "create pdf document" },
+#endif
 	{ mudraw_main, "draw", "convert document" },
+	{ mutrace_main, "trace", "trace device calls" },
+#if FZ_ENABLE_PDF
+	{ pdfextract_main, "extract", "extract font and image resources" },
+#endif
+#if FZ_ENABLE_PDF
+	{ pdfinfo_main, "info", "show information about pdf resources" },
+	{ pdfmerge_main, "merge", "merge pages from multiple pdf sources into a new pdf" },
+	{ pdfpages_main, "pages", "show information about pdf pages" },
+	{ pdfposter_main, "poster", "split large page into many tiles" },
+	{ pdfsign_main, "sign", "manipulate PDF digital signatures" },
+#endif
 #if FZ_ENABLE_JS
 	{ murun_main, "run", "run javascript" },
 #endif
 #if FZ_ENABLE_PDF
-	{ pdfclean_main, "clean", "rewrite pdf file" },
-	{ pdfextract_main, "extract", "extract font and image resources" },
-	{ pdfinfo_main, "info", "show information about pdf resources" },
-	{ pdfpages_main, "pages", "show information about pdf pages" },
-	{ pdfposter_main, "poster", "split large page into many tiles" },
 	{ pdfshow_main, "show", "show internal pdf objects" },
-	{ pdfcreate_main, "create", "create pdf document" },
-	{ pdfmerge_main, "merge", "merge pages from multiple pdf sources into a new pdf" },
-	{ pdfportfolio_main, "portfolio", "manipulate PDF portfolios" },
+#ifndef NDEBUG
+	{ cmapdump_main, "cmapdump", "dump CMap resource as C source file" },
+#endif
 #endif
 };
 
@@ -90,7 +108,7 @@ int main(int argc, char **argv)
 			end++;
 		if ((end-4 >= start) && (end[-4] == '.') && (end[-3] == 'e') && (end[-2] == 'x') && (end[-1] == 'e'))
 			end = end-4;
-		for (i = 0; i < nelem(tools); i++)
+		for (i = 0; i < (int)nelem(tools); i++)
 		{
 			strcpy(buf, "mupdf");
 			strcat(buf, tools[i].name);
@@ -107,7 +125,7 @@ int main(int argc, char **argv)
 
 	if (argc > 1)
 	{
-		for (i = 0; i < nelem(tools); i++)
+		for (i = 0; i < (int)nelem(tools); i++)
 			if (!strcmp(tools[i].name, argv[1]))
 				return tools[i].func(argc - 1, argv + 1);
 		if (!strcmp(argv[1], "-v"))
@@ -121,7 +139,7 @@ int main(int argc, char **argv)
 
 	fprintf(stderr, "usage: mutool <command> [options]\n");
 
-	for (i = 0; i < nelem(tools); i++)
+	for (i = 0; i < (int)nelem(tools); i++)
 		fprintf(stderr, "\t%s\t-- %s\n", tools[i].name, tools[i].desc);
 
 	return 1;
