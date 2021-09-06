@@ -31,6 +31,7 @@ fz_list_archive_entry(fz_context *ctx, fz_archive *arch, int idx)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot list archive entries");
 	return arch->list_entry(ctx, arch, idx);
 }
+
 int
 fz_count_archive_entries(fz_context *ctx, fz_archive *arch)
 {
@@ -59,17 +60,12 @@ fz_open_archive_with_stream(fz_context *ctx, fz_stream *file)
 {
 	fz_archive *arch = NULL;
 
-	fz_try(ctx)
-	{
-		if (fz_is_zip_archive(ctx, file))
-			arch = fz_open_zip_archive_with_stream(ctx, file);
-		else if (fz_is_tar_archive(ctx, file))
-			arch = fz_open_tar_archive_with_stream(ctx, file);
-		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot recognize archive");
-	}
-	fz_catch(ctx)
-		fz_rethrow(ctx);
+	if (fz_is_zip_archive(ctx, file))
+		arch = fz_open_zip_archive_with_stream(ctx, file);
+	else if (fz_is_tar_archive(ctx, file))
+		arch = fz_open_tar_archive_with_stream(ctx, file);
+	else
+		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot recognize archive");
 
 	return arch;
 }

@@ -2,6 +2,8 @@
 
 #include "mupdf/fitz.h"
 
+#include <stdio.h>
+#include <errno.h>
 #include <time.h>
 #include <windows.h>
 
@@ -49,7 +51,7 @@ fz_utf8_from_wchar(const wchar_t *s)
 		len += fz_runelen(*src++);
 	}
 
-	d = malloc(len);
+	d = Memento_label(malloc(len), "utf8_from_wchar");
 	if (d != NULL)
 	{
 		dst = d;
@@ -73,13 +75,17 @@ fz_wchar_from_utf8(const char *s)
 		return NULL;
 	while (*s) {
 		s += fz_chartorune(&c, s);
+		/* Truncating c to a wchar_t can be problematic if c
+		 * is 0x10000. */
+		if (c >= 0x10000)
+			c = FZ_REPLACEMENT_CHARACTER;
 		*d++ = c;
 	}
 	*d = 0;
 	return r;
 }
 
-FILE *
+void *
 fz_fopen_utf8(const char *name, const char *mode)
 {
 	wchar_t *wname, *wmode;
@@ -130,7 +136,7 @@ fz_argv_from_wargv(int argc, wchar_t **wargv)
 	char **argv;
 	int i;
 
-	argv = calloc(argc, sizeof(char *));
+	argv = Memento_label(calloc(argc, sizeof(char *)), "fz_argv");
 	if (argv == NULL)
 	{
 		fprintf(stderr, "Out of memory while processing command line args!\n");
@@ -139,7 +145,7 @@ fz_argv_from_wargv(int argc, wchar_t **wargv)
 
 	for (i = 0; i < argc; i++)
 	{
-		argv[i] = fz_utf8_from_wchar(wargv[i]);
+		argv[i] = Memento_label(fz_utf8_from_wchar(wargv[i]), "fz_arg");
 		if (argv[i] == NULL)
 		{
 			fprintf(stderr, "Out of memory while processing command line args!\n");
@@ -158,5 +164,9 @@ fz_free_argv(int argc, char **argv)
 		free(argv[i]);
 	free(argv);
 }
+
+#else
+
+int fz_time_dummy;
 
 #endif /* _WIN32 */

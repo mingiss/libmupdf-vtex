@@ -4,7 +4,7 @@
 
 #include <time.h>
 
-#if defined(__unix__)
+#if defined(__unix__) || defined(__APPLE__)
 #include <sys/time.h>
 #elif defined(_WIN32)
 #include <sys/timeb.h>
@@ -14,7 +14,7 @@
 
 static double Now(void)
 {
-#if defined(__unix__)
+#if defined(__unix__) || defined(__APPLE__)
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return floor(tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0);
@@ -107,7 +107,7 @@ static int YearFromTime(double t)
 	return y;
 }
 
-static int InLeapYear(int t)
+static int InLeapYear(double t)
 {
 	return DaysInYear(YearFromTime(t)) == 366;
 }
@@ -217,7 +217,7 @@ static double MakeDay(double y, double m, double date)
 		return NAN;
 
 	yd = floor(TimeFromYear(y) / msPerDay);
-	md = firstDayOfMonth[InLeapYear(y)][im];
+	md = firstDayOfMonth[DaysInYear(y) == 366][im];
 
 	return yd + md + date - 1;
 }
@@ -629,7 +629,7 @@ static void Dp_setHours(js_State *J)
 {
 	double t = LocalTime(js_todate(J, 0));
 	double h = js_tonumber(J, 1);
-	double m = js_optnumber(J, 2, HourFromTime(t));
+	double m = js_optnumber(J, 2, MinFromTime(t));
 	double s = js_optnumber(J, 3, SecFromTime(t));
 	double ms = js_optnumber(J, 4, msFromTime(t));
 	js_setdate(J, 0, UTC(MakeDate(Day(t), MakeTime(h, m, s, ms))));
@@ -649,7 +649,7 @@ static void Dp_setMonth(js_State *J)
 	double t = LocalTime(js_todate(J, 0));
 	double y = YearFromTime(t);
 	double m = js_tonumber(J, 1);
-	double d = js_optnumber(J, 3, DateFromTime(t));
+	double d = js_optnumber(J, 2, DateFromTime(t));
 	js_setdate(J, 0, UTC(MakeDate(MakeDay(y, m, d), TimeWithinDay(t))));
 }
 
@@ -716,7 +716,7 @@ static void Dp_setUTCMonth(js_State *J)
 	double t = js_todate(J, 0);
 	double y = YearFromTime(t);
 	double m = js_tonumber(J, 1);
-	double d = js_optnumber(J, 3, DateFromTime(t));
+	double d = js_optnumber(J, 2, DateFromTime(t));
 	js_setdate(J, 0, MakeDate(MakeDay(y, m, d), TimeWithinDay(t)));
 }
 
@@ -741,7 +741,7 @@ static void Dp_toJSON(js_State *J)
 
 	js_getproperty(J, 0, "toISOString");
 	if (!js_iscallable(J, -1))
-		js_typeerror(J, "Date.prototype.toJSON: this.toISOString not a function");
+		js_typeerror(J, "this.toISOString is not a function");
 	js_copy(J, 0);
 	js_call(J, 0);
 }

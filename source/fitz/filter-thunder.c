@@ -1,12 +1,8 @@
-#include "mupdf/fitz/system.h"
-#include "mupdf/fitz/context.h"
-#include "mupdf/fitz/stream.h"
+#include "mupdf/fitz.h"
 
 /* 4bit greyscale Thunderscan decoding */
 
-typedef struct fz_thunder_s fz_thunder;
-
-struct fz_thunder_s
+typedef struct
 {
 	fz_stream *chain;
 	int lastpixel;
@@ -15,7 +11,7 @@ struct fz_thunder_s
 
 	int len;
 	unsigned char *buffer;
-};
+} fz_thunder;
 
 static int
 next_thunder(fz_context *ctx, fz_stream *stm, size_t max)
@@ -118,36 +114,28 @@ static void
 close_thunder(fz_context *ctx, void *state_)
 {
 	fz_thunder *state = (fz_thunder *)state_;
-	fz_stream *chain = state->chain;
-
+	fz_drop_stream(ctx, state->chain);
 	fz_free(ctx, state->buffer);
 	fz_free(ctx, state);
-	fz_drop_stream(ctx, chain);
 }
 
 fz_stream *
 fz_open_thunder(fz_context *ctx, fz_stream *chain, int w)
 {
-	fz_thunder *state = NULL;
-
-	fz_var(state);
-
+	fz_thunder *state = fz_malloc_struct(ctx, fz_thunder);
 	fz_try(ctx)
 	{
-		state = fz_malloc_struct(ctx, fz_thunder);
-		state->chain = chain;
 		state->run = 0;
 		state->pixel = 0;
 		state->lastpixel = 0;
 		state->len = w / 2;
-		state->buffer = fz_malloc(ctx, state->len);
+		state->buffer = Memento_label(fz_malloc(ctx, state->len), "thunder_buffer");
+		state->chain = fz_keep_stream(ctx, chain);
 	}
 	fz_catch(ctx)
 	{
 		fz_free(ctx, state);
-		fz_drop_stream(ctx, chain);
 		fz_rethrow(ctx);
 	}
-
 	return fz_new_stream(ctx, state, next_thunder, close_thunder);
 }

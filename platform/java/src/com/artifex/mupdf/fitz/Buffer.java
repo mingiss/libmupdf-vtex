@@ -6,15 +6,12 @@ public class Buffer
 		Context.init();
 	}
 
-	public static final int DEFAULT_BUFFER_SIZE = 1024;
-
 	private long pointer;
 
 	protected native void finalize();
 
 	public void destroy() {
 		finalize();
-		pointer = 0;
 	}
 
 	private native long newNativeBuffer(int n);
@@ -24,7 +21,7 @@ public class Buffer
 	}
 
 	public Buffer() {
-		pointer = newNativeBuffer(DEFAULT_BUFFER_SIZE);
+		pointer = newNativeBuffer(0);
 	}
 
 	public native int getLength();

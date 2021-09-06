@@ -1,13 +1,20 @@
 #include <sys/stat.h>
 #include "mupdf/fitz.h"
 
-typedef struct fz_directory_s fz_directory;
-struct fz_directory_s
+#include <string.h>
+#include <errno.h>
+#include <sys/stat.h>
+
+#ifdef _MSC_VER
+#define stat _stat
+#endif
+
+typedef struct
 {
 	fz_archive super;
 
 	char *path;
-};
+} fz_directory;
 
 static void drop_directory(fz_context *ctx, fz_archive *arch)
 {
@@ -52,9 +59,9 @@ fz_is_directory(fz_context *ctx, const char *path)
 	struct stat info;
 
 	if (stat(path, &info) < 0)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot stat: %s", strerror(errno));
+		return 0;
 
-	return info.st_mode & S_IFDIR;
+	return S_ISDIR(info.st_mode);
 }
 
 fz_archive *

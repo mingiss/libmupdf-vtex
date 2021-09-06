@@ -1,52 +1,21 @@
-#ifndef MUPDF_XPS_IMP_H
-#define MUPDF_XPS_IMP_H
+#ifndef SOURCE_XPS_IMP_H
+#define SOURCE_XPS_IMP_H
 
 typedef struct xps_document_s xps_document;
 typedef struct xps_page_s xps_page;
 
-/*
-	xps_open_document: Open a document.
-
-	Open a document for reading so the library is able to locate
-	objects and pages inside the file.
-
-	The returned xps_document should be used when calling most
-	other functions. Note that it wraps the context, so those
-	functions implicitly get access to the global state in
-	context.
-
-	filename: a path to a file as it would be given to open(2).
-*/
-xps_document *xps_open_document(fz_context *ctx, const char *filename);
-
-/*
-	xps_open_document_with_stream: Opens a document.
-
-	Same as xps_open_document, but takes a stream instead of a
-	filename to locate the document to open. Increments the
-	reference count of the stream. See fz_open_file,
-	fz_open_file_w or fz_open_fd for opening a stream, and
-	fz_drop_stream for closing an open stream.
-*/
-xps_document *xps_open_document_with_stream(fz_context *ctx, fz_stream *file);
-
-int xps_count_pages(fz_context *ctx, xps_document *doc);
-xps_page *xps_load_page(fz_context *ctx, xps_document *doc, int number);
-fz_outline *xps_load_outline(fz_context *ctx, xps_document *doc);
-void xps_run_page(fz_context *ctx, xps_page *page, fz_device *dev, const fz_matrix *ctm, fz_cookie *cookie);
-fz_link *xps_load_links(fz_context *ctx, xps_page *page);
-
-/*
- * Memory, and string functions.
- */
+fz_document *xps_open_document(fz_context *ctx, const char *filename);
+fz_document *xps_open_document_with_stream(fz_context *ctx, fz_stream *file);
+int xps_count_pages(fz_context *ctx, fz_document *doc, int chapter);
+fz_page *xps_load_page(fz_context *ctx, fz_document *doc, int chapter, int number);
+fz_outline *xps_load_outline(fz_context *ctx, fz_document *doc);
+void xps_run_page(fz_context *ctx, fz_page *page, fz_device *dev, fz_matrix ctm, fz_cookie *cookie);
+fz_link *xps_load_links(fz_context *ctx, fz_page *page);
+fz_location xps_lookup_link_target(fz_context *ctx, fz_document *doc, const char *target_uri, float *xp, float *yp);
 
 int xps_strcasecmp(char *a, char *b);
 void xps_resolve_url(fz_context *ctx, xps_document *doc, char *output, char *base_uri, char *path, int output_size);
 char *xps_parse_point(fz_context *ctx, xps_document *doc, char *s_in, float *x, float *y);
-
-/*
- * Container parts.
- */
 
 typedef struct xps_part_s xps_part;
 
@@ -57,12 +26,12 @@ struct xps_part_s
 };
 
 int xps_has_part(fz_context *ctx, xps_document *doc, char *partname);
-xps_part *xps_read_part(fz_context *ctx, xps_document *doc, char *partname);
-void xps_drop_part(fz_context *ctx, xps_document *doc, xps_part *part);
 
 /*
- * Document structure.
- */
+	Read and interleave split parts from a ZIP file.
+*/
+xps_part *xps_read_part(fz_context *ctx, xps_document *doc, char *partname);
+void xps_drop_part(fz_context *ctx, xps_document *doc, xps_part *part);
 
 typedef struct xps_fixdoc_s xps_fixdoc;
 typedef struct xps_fixpage_s xps_fixpage;
@@ -89,7 +58,7 @@ struct xps_page_s
 	fz_page super;
 	xps_document *doc;
 	xps_fixpage *fix;
-	fz_xml *root;
+	fz_xml_doc *xml;
 };
 
 struct xps_target_s
@@ -102,12 +71,6 @@ struct xps_target_s
 void xps_read_page_list(fz_context *ctx, xps_document *doc);
 void xps_print_page_list(fz_context *ctx, xps_document *doc);
 void xps_drop_page_list(fz_context *ctx, xps_document *doc);
-
-int xps_lookup_link_target(fz_context *ctx, xps_document *doc, char *target_uri, float *xp, float *yp);
-
-/*
- * Images, fonts, and colorspaces.
- */
 
 typedef struct xps_font_cache_s xps_font_cache;
 
@@ -137,17 +100,13 @@ void xps_print_path(fz_context *ctx, xps_document *doc);
 void xps_parse_color(fz_context *ctx, xps_document *doc, char *base_uri, char *hexstring, fz_colorspace **csp, float *samples);
 void xps_set_color(fz_context *ctx, xps_document *doc, fz_colorspace *colorspace, float *samples);
 
-/*
- * Resource dictionaries.
- */
-
 typedef struct xps_resource_s xps_resource;
 
 struct xps_resource_s
 {
 	char *name;
 	char *base_uri; /* only used in the head nodes */
-	fz_xml *base_xml; /* only used in the head nodes, to free the xml document */
+	fz_xml_doc *base_xml; /* only used in the head nodes, to free the xml document */
 	fz_xml *data;
 	xps_resource *next;
 	xps_resource *parent; /* up to the previous dict in the stack */
@@ -159,52 +118,52 @@ void xps_resolve_resource_reference(fz_context *ctx, xps_document *doc, xps_reso
 
 void xps_print_resource_dictionary(fz_context *ctx, xps_document *doc, xps_resource *dict);
 
+void xps_parse_fixed_page(fz_context *ctx, xps_document *doc, fz_matrix ctm, xps_page *page);
+void xps_parse_canvas(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *node);
+
 /*
- * Fixed page/graphics parsing.
- */
+	Parse an XPS <Path> element, and call relevant
+	functions for drawing and/or clipping the child elements.
+*/
+void xps_parse_path(fz_context *ctx, xps_document *doc, fz_matrix ctm, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_glyphs(fz_context *ctx, xps_document *doc, fz_matrix ctm, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_solid_color_brush(fz_context *ctx, xps_document *doc, fz_matrix ctm, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_image_brush(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_visual_brush(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_linear_gradient_brush(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_radial_gradient_brush(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *node);
 
-void xps_parse_fixed_page(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, xps_page *page);
-void xps_parse_canvas(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_path(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_glyphs(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_solid_color_brush(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_image_brush(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_visual_brush(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_linear_gradient_brush(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_radial_gradient_brush(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *node);
-
-void xps_parse_tiling_brush(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *root, void(*func)(fz_context *ctx, xps_document*, const fz_matrix *, const fz_rect *, char*, xps_resource*, fz_xml*, void*), void *user);
+void xps_parse_tiling_brush(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *root, void(*func)(fz_context *ctx, xps_document*, fz_matrix, fz_rect, char*, xps_resource*, fz_xml*, void*), void *user);
 
 fz_font *xps_lookup_font(fz_context *ctx, xps_document *doc, char *base_uri, char *font_uri, char *style_att);
-fz_text *xps_parse_glyphs_imp(fz_context *ctx, xps_document *doc, const fz_matrix *ctm,
-	fz_font *font, float size, float originx, float originy,
-	int is_sideways, int bidi_level,
-	char *indices, char *unicode);
+
+/*
+	Parse an abbreviated geometry string, and call
+	moveto/lineto/curveto functions to build up a path.
+ */
 fz_path *xps_parse_abbreviated_geometry(fz_context *ctx, xps_document *doc, char *geom, int *fill_rule);
 fz_path *xps_parse_path_geometry(fz_context *ctx, xps_document *doc, xps_resource *dict, fz_xml *root, int stroking, int *fill_rule);
-void xps_parse_transform(fz_context *ctx, xps_document *doc, char *att, fz_xml *tag, fz_matrix *new_ctm, const fz_matrix *ctm);
-void xps_parse_rectangle(fz_context *ctx, xps_document *doc, char *text, fz_rect *rect);
+fz_matrix xps_parse_transform(fz_context *ctx, xps_document *doc, char *att, fz_xml *tag, fz_matrix ctm);
+fz_rect xps_parse_rectangle(fz_context *ctx, xps_document *doc, char *text);
 
-void xps_begin_opacity(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, char *opacity_att, fz_xml *opacity_mask_tag);
+void xps_begin_opacity(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, char *opacity_att, fz_xml *opacity_mask_tag);
 void xps_end_opacity(fz_context *ctx, xps_document *doc, char *base_uri, xps_resource *dict, char *opacity_att, fz_xml *opacity_mask_tag);
 
-void xps_parse_brush(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *node);
-void xps_parse_element(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, const fz_rect *area, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_brush(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *node);
+void xps_parse_element(fz_context *ctx, xps_document *doc, fz_matrix ctm, fz_rect area, char *base_uri, xps_resource *dict, fz_xml *node);
 
-void xps_clip(fz_context *ctx, xps_document *doc, const fz_matrix *ctm, xps_resource *dict, char *clip_att, fz_xml *clip_tag);
+void xps_clip(fz_context *ctx, xps_document *doc, fz_matrix ctm, xps_resource *dict, char *clip_att, fz_xml *clip_tag);
 
 fz_xml *xps_lookup_alternate_content(fz_context *ctx, xps_document *doc, fz_xml *node);
 
-/*
- * The interpreter context.
- */
-
 typedef struct xps_entry_s xps_entry;
+
+/* Implementation details: Subject to change. */
 
 struct xps_entry_s
 {
 	char *name;
-	fz_off_t offset;
+	int64_t offset;
 	int csize;
 	int usize;
 };
@@ -242,5 +201,14 @@ struct xps_document_s
 	fz_device *dev;
 	fz_cookie *cookie;
 };
+
+/*
+	Parse unicode and indices strings and encode glyphs.
+	Calculate metrics for positioning.
+*/
+fz_text *xps_parse_glyphs_imp(fz_context *ctx, xps_document *doc, fz_matrix ctm,
+	fz_font *font, float size, float originx, float originy,
+	int is_sideways, int bidi_level,
+	char *indices, char *unicode);
 
 #endif

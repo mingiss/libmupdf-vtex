@@ -3,12 +3,12 @@
 # Optional thirdparty libraryes
 thirdparty/luratech
 thirdparty/jpegxr
+thirdparty/mapping-resources-pdf
+thirdparty/cmap-resources
 
 # Generated files:
 build
 generated
-# include/mupdf/pdf/name-table.h
-# source/pdf/pdf-name-table.h
 tags
 cscope.*
 
@@ -19,42 +19,22 @@ cscope.*
 \#*\#
 
 # Editor settings:
+.exrc
 .vimrc
-.gradle
 *.xcworkspace
 *.xcuserdatad
-
-# Test files:
-*.pdf
-*.xps
-*.epub
-*.fb2
-*.xhtml
-*.css
-*.svg
-*.pam
-*.pbm
-*.pgm
-*.ppm
-*.png
-*.jpg
-*.jpeg
-*.pcl
-*.ps
+user.make
+guide
 
 # Temporary and build files:
 *.class
 *.jar
 *.o
 *.so
-*.zip
 *.dll
 DerivedData
 
-platform/java/obj
-platform/java/libs
 platform/java/local.properties
-
 platform/win32/*.user
 platform/win32/*.ncb
 platform/win32/*.suo

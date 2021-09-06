@@ -1,5 +1,7 @@
 #include "mupdf/fitz.h"
 
+#include <string.h>
+
 /* Return non-null terminated pointers to key/value entries in comma separated
  * option string. A plain key has the default value 'yes'. Use strncmp to compare
  * key/value strings. */
@@ -48,6 +50,32 @@ fz_option_eq(const char *a, const char *b)
 	return !strncmp(a, b, n) && (a[n] == ',' || a[n] == 0);
 }
 
+size_t
+fz_copy_option(fz_context *ctx, const char *val, char *dest, size_t maxlen)
+{
+	const char *e = val;
+	size_t len, len2;
+
+	if (val == NULL) {
+		if (maxlen)
+			*dest = 0;
+		return 0;
+	}
+
+	while (*e != ',' && *e != 0)
+		e++;
+
+	len = e-val;
+	len2 = len+1; /* Allow for terminator */
+	if (len > maxlen)
+		len = maxlen;
+	memcpy(dest, val, len);
+	if (len < maxlen)
+		memset(dest+len, 0, maxlen-len);
+
+	return len2 >= maxlen ? len2 - maxlen : 0;
+}
+
 fz_document_writer *fz_new_document_writer_of_size(fz_context *ctx, size_t size, fz_document_writer_begin_page_fn *begin_page,
 	fz_document_writer_end_page_fn *end_page, fz_document_writer_close_writer_fn *close, fz_document_writer_drop_writer_fn *drop)
 {
@@ -63,80 +91,145 @@ fz_document_writer *fz_new_document_writer_of_size(fz_context *ctx, size_t size,
 
 fz_document_writer *fz_new_png_pixmap_writer(fz_context *ctx, const char *path, const char *options)
 {
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.png", 0, fz_save_pixmap_as_png);
-}
-
-fz_document_writer *fz_new_tga_pixmap_writer(fz_context *ctx, const char *path, const char *options)
-{
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.tga", 0, fz_save_pixmap_as_tga);
+	return fz_new_pixmap_writer(ctx, path, options, "out-%04d.png", 0, fz_save_pixmap_as_png);
 }
 
 fz_document_writer *fz_new_pam_pixmap_writer(fz_context *ctx, const char *path, const char *options)
 {
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.pam", 0, fz_save_pixmap_as_pam);
+	return fz_new_pixmap_writer(ctx, path, options, "out-%04d.pam", 0, fz_save_pixmap_as_pam);
 }
 
 fz_document_writer *fz_new_pnm_pixmap_writer(fz_context *ctx, const char *path, const char *options)
 {
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.pnm", 0, fz_save_pixmap_as_pnm);
+	return fz_new_pixmap_writer(ctx, path, options, "out-%04d.pnm", 0, fz_save_pixmap_as_pnm);
 }
 
 fz_document_writer *fz_new_pgm_pixmap_writer(fz_context *ctx, const char *path, const char *options)
 {
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.pgm", 1, fz_save_pixmap_as_pnm);
+	return fz_new_pixmap_writer(ctx, path, options, "out-%04d.pgm", 1, fz_save_pixmap_as_pnm);
 }
 
 fz_document_writer *fz_new_ppm_pixmap_writer(fz_context *ctx, const char *path, const char *options)
 {
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.ppm", 3, fz_save_pixmap_as_pnm);
+	return fz_new_pixmap_writer(ctx, path, options, "out-%04d.ppm", 3, fz_save_pixmap_as_pnm);
 }
 
 fz_document_writer *fz_new_pbm_pixmap_writer(fz_context *ctx, const char *path, const char *options)
 {
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.pbm", 1, fz_save_pixmap_as_pbm);
+	return fz_new_pixmap_writer(ctx, path, options, "out-%04d.pbm", 1, fz_save_pixmap_as_pbm);
 }
 
 fz_document_writer *fz_new_pkm_pixmap_writer(fz_context *ctx, const char *path, const char *options)
 {
-	return fz_new_pixmap_writer(ctx, path, options, "out-%04.pkm", 4, fz_save_pixmap_as_pkm);
+	return fz_new_pixmap_writer(ctx, path, options, "out-%04d.pkm", 4, fz_save_pixmap_as_pkm);
+}
+
+static int is_extension(const char *a, const char *ext)
+{
+	if (a[0] == '.')
+		++a;
+	return !fz_strcasecmp(a, ext);
+}
+
+static const char *prev_period(const char *start, const char *p)
+{
+	while (--p > start)
+		if (*p == '.')
+			return p;
+	return NULL;
 }
 
 fz_document_writer *
-fz_new_document_writer(fz_context *ctx, const char *path, const char *format, const char *options)
+fz_new_document_writer(fz_context *ctx, const char *path, const char *explicit_format, const char *options)
 {
+	const char *format = explicit_format;
 	if (!format)
-	{
 		format = strrchr(path, '.');
-		if (!format)
-			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot detect document format");
-		format += 1; /* skip the '.' */
-	}
-
-	if (!fz_strcasecmp(format, "cbz"))
-		return fz_new_cbz_writer(ctx, path, options);
+	while (format)
+	{
 #if FZ_ENABLE_PDF
-	if (!fz_strcasecmp(format, "pdf"))
-		return fz_new_pdf_writer(ctx, path, options);
+		if (is_extension(format, "pdf"))
+			return fz_new_pdf_writer(ctx, path, options);
 #endif
-	if (!fz_strcasecmp(format, "svg"))
-		return fz_new_svg_writer(ctx, path, options);
 
-	if (!fz_strcasecmp(format, "png"))
-		return fz_new_png_pixmap_writer(ctx, path, options);
-	if (!fz_strcasecmp(format, "tga"))
-		return fz_new_tga_pixmap_writer(ctx, path, options);
-	if (!fz_strcasecmp(format, "pam"))
-		return fz_new_pam_pixmap_writer(ctx, path, options);
-	if (!fz_strcasecmp(format, "pnm"))
-		return fz_new_pnm_pixmap_writer(ctx, path, options);
-	if (!fz_strcasecmp(format, "pgm"))
-		return fz_new_pgm_pixmap_writer(ctx, path, options);
-	if (!fz_strcasecmp(format, "ppm"))
-		return fz_new_ppm_pixmap_writer(ctx, path, options);
-	if (!fz_strcasecmp(format, "pbm"))
-		return fz_new_pbm_pixmap_writer(ctx, path, options);
-	if (!fz_strcasecmp(format, "pkm"))
-		return fz_new_pkm_pixmap_writer(ctx, path, options);
+		if (is_extension(format, "cbz"))
+			return fz_new_cbz_writer(ctx, path, options);
+
+		if (is_extension(format, "svg"))
+			return fz_new_svg_writer(ctx, path, options);
+
+		if (is_extension(format, "png"))
+			return fz_new_png_pixmap_writer(ctx, path, options);
+		if (is_extension(format, "pam"))
+			return fz_new_pam_pixmap_writer(ctx, path, options);
+		if (is_extension(format, "pnm"))
+			return fz_new_pnm_pixmap_writer(ctx, path, options);
+		if (is_extension(format, "pgm"))
+			return fz_new_pgm_pixmap_writer(ctx, path, options);
+		if (is_extension(format, "ppm"))
+			return fz_new_ppm_pixmap_writer(ctx, path, options);
+		if (is_extension(format, "pbm"))
+			return fz_new_pbm_pixmap_writer(ctx, path, options);
+		if (is_extension(format, "pkm"))
+			return fz_new_pkm_pixmap_writer(ctx, path, options);
+
+		if (is_extension(format, "pcl"))
+			return fz_new_pcl_writer(ctx, path, options);
+		if (is_extension(format, "pclm"))
+			return fz_new_pclm_writer(ctx, path, options);
+		if (is_extension(format, "ps"))
+			return fz_new_ps_writer(ctx, path, options);
+		if (is_extension(format, "pwg"))
+			return fz_new_pwg_writer(ctx, path, options);
+
+		if (is_extension(format, "txt") || is_extension(format, "text"))
+			return fz_new_text_writer(ctx, "text", path, options);
+		if (is_extension(format, "html"))
+			return fz_new_text_writer(ctx, "html", path, options);
+		if (is_extension(format, "xhtml"))
+			return fz_new_text_writer(ctx, "xhtml", path, options);
+		if (is_extension(format, "stext") || is_extension(format, "stext.xml"))
+			return fz_new_text_writer(ctx, "stext.xml", path, options);
+		if (is_extension(format, "stext.json"))
+			return fz_new_text_writer(ctx, "stext.json", path, options);
+
+		if (format != explicit_format)
+			format = prev_period(path, format);
+		else
+			format = NULL;
+	}
+	fz_throw(ctx, FZ_ERROR_GENERIC, "cannot detect document format");
+}
+
+fz_document_writer *
+fz_new_document_writer_with_output(fz_context *ctx, fz_output *out, const char *format, const char *options)
+{
+	if (is_extension(format, "cbz"))
+		return fz_new_cbz_writer_with_output(ctx, out, options);
+#if FZ_ENABLE_PDF
+	if (is_extension(format, "pdf"))
+		return fz_new_pdf_writer_with_output(ctx, out, options);
+#endif
+
+	if (is_extension(format, "pcl"))
+		return fz_new_pcl_writer_with_output(ctx, out, options);
+	if (is_extension(format, "pclm"))
+		return fz_new_pclm_writer_with_output(ctx, out, options);
+	if (is_extension(format, "ps"))
+		return fz_new_ps_writer_with_output(ctx, out, options);
+	if (is_extension(format, "pwg"))
+		return fz_new_pwg_writer_with_output(ctx, out, options);
+
+	if (is_extension(format, "txt") || is_extension(format, "text"))
+		return fz_new_text_writer_with_output(ctx, "text", out, options);
+	if (is_extension(format, "html"))
+		return fz_new_text_writer_with_output(ctx, "html", out, options);
+	if (is_extension(format, "xhtml"))
+		return fz_new_text_writer_with_output(ctx, "xhtml", out, options);
+	if (is_extension(format, "stext") || is_extension(format, "stext.xml"))
+		return fz_new_text_writer_with_output(ctx, "stext.xml", out, options);
+	if (is_extension(format, "stext.json"))
+		return fz_new_text_writer_with_output(ctx, "stext.json", out, options);
 
 	fz_throw(ctx, FZ_ERROR_GENERIC, "unknown output document format: %s", format);
 }
@@ -159,14 +252,18 @@ fz_drop_document_writer(fz_context *ctx, fz_document_writer *wri)
 		fz_warn(ctx, "dropping unclosed document writer");
 	if (wri->drop_writer)
 		wri->drop_writer(ctx, wri);
+	if (wri->dev)
+		fz_drop_device(ctx, wri->dev);
 	fz_free(ctx, wri);
 }
 
 fz_device *
-fz_begin_page(fz_context *ctx, fz_document_writer *wri, const fz_rect *mediabox)
+fz_begin_page(fz_context *ctx, fz_document_writer *wri, fz_rect mediabox)
 {
 	if (!wri)
 		return NULL;
+	if (wri->dev)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "called begin page without ending the previous page");
 	wri->dev = wri->begin_page(ctx, wri, mediabox);
 	return wri->dev;
 }
@@ -181,4 +278,33 @@ fz_end_page(fz_context *ctx, fz_document_writer *wri)
 	dev = wri->dev;
 	wri->dev = NULL;
 	wri->end_page(ctx, wri, dev);
+}
+
+void
+fz_write_document(fz_context *ctx, fz_document_writer *wri, fz_document *doc)
+{
+	int i, n;
+	fz_page *page = NULL;
+	fz_device *dev;
+
+	fz_var(page);
+
+	n = fz_count_pages(ctx, doc);
+	fz_try(ctx)
+	{
+		for (i = 0; i < n; i++)
+		{
+			page = fz_load_page(ctx, doc, i);
+			dev = fz_begin_page(ctx, wri, fz_bound_page(ctx, page));
+			fz_run_page(ctx, page, dev, fz_identity, NULL);
+			fz_drop_page(ctx, page);
+			page = NULL;
+			fz_end_page(ctx, wri);
+		}
+	}
+	fz_catch(ctx)
+	{
+		fz_drop_page(ctx, page);
+		fz_rethrow(ctx);
+	}
 }

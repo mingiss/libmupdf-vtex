@@ -4,12 +4,15 @@
 
 #include "mupdf/fitz.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+
 /* input options */
 static const char *password = "";
 static int alphabits = 8;
-static float layout_w = 450;
-static float layout_h = 600;
-static float layout_em = 12;
+static float layout_w = FZ_DEFAULT_LAYOUT_W;
+static float layout_h = FZ_DEFAULT_LAYOUT_H;
+static float layout_em = FZ_DEFAULT_LAYOUT_EM;
 static char *layout_css = NULL;
 static int layout_use_doc_css = 1;
 
@@ -39,16 +42,20 @@ static void usage(void)
 		"\n"
 		"\t-o -\toutput file name (%%d for page number)\n"
 		"\t-F -\toutput format (default inferred from output file name)\n"
-		"\t\t\tpng, pnm, pgm, ppm, pam, tga, pbm, pkm,\n"
-		"\t\t\tpdf, svg, cbz\n"
+		"\t\t\traster: cbz, png, pnm, pgm, ppm, pam, pbm, pkm.\n"
+		"\t\t\tprint-raster: pcl, pclm, ps, pwg.\n"
+		"\t\t\tvector: pdf, svg.\n"
+		"\t\t\ttext: html, xhtml, text, stext.\n"
 		"\t-O -\tcomma separated list of options for output format\n"
 		"\n"
 		"\tpages\tcomma separated list of page ranges (N=last page)\n"
 		"\n"
 		);
 	fputs(fz_draw_options_usage, stderr);
+	fputs(fz_pcl_write_options_usage, stderr);
+	fputs(fz_pclm_write_options_usage, stderr);
+	fputs(fz_pwg_write_options_usage, stderr);
 	fputs(fz_stext_options_usage, stderr);
-	fputs(fz_cbz_write_options_usage, stderr);
 #if FZ_ENABLE_PDF
 	fputs(fz_pdf_write_options_usage, stderr);
 #endif
@@ -60,14 +67,25 @@ static void runpage(int number)
 {
 	fz_rect mediabox;
 	fz_page *page;
-	fz_device *dev;
+	fz_device *dev = NULL;
 
 	page = fz_load_page(ctx, doc, number - 1);
-	fz_bound_page(ctx, page, &mediabox);
-	dev = fz_begin_page(ctx, out, &mediabox);
-	fz_run_page(ctx, page, dev, &fz_identity, NULL);
-	fz_end_page(ctx, out);
-	fz_drop_page(ctx, page);
+
+	fz_var(dev);
+
+	fz_try(ctx)
+	{
+		mediabox = fz_bound_page(ctx, page);
+		dev = fz_begin_page(ctx, out, mediabox);
+		fz_run_page(ctx, page, dev, fz_identity, NULL);
+		fz_end_page(ctx, out);
+	}
+	fz_always(ctx)
+	{
+		fz_drop_page(ctx, page);
+	}
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 }
 
 static void runrange(const char *range)
@@ -88,6 +106,7 @@ static void runrange(const char *range)
 int muconvert_main(int argc, char **argv)
 {
 	int i, c;
+	int retval = EXIT_SUCCESS;
 
 	while ((c = fz_getopt(argc, argv, "p:A:W:H:S:U:Xo:F:O:")) != -1)
 	{
@@ -151,26 +170,34 @@ int muconvert_main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	for (i = fz_optind; i < argc; ++i)
+	fz_try(ctx)
 	{
-		doc = fz_open_document(ctx, argv[i]);
-		if (fz_needs_password(ctx, doc))
-			if (!fz_authenticate_password(ctx, doc, password))
-				fz_throw(ctx, FZ_ERROR_GENERIC, "cannot authenticate password: %s", argv[i]);
-		fz_layout_document(ctx, doc, layout_w, layout_h, layout_em);
-		count = fz_count_pages(ctx, doc);
+		for (i = fz_optind; i < argc; ++i)
+		{
+			doc = fz_open_document(ctx, argv[i]);
+			if (fz_needs_password(ctx, doc))
+				if (!fz_authenticate_password(ctx, doc, password))
+					fz_throw(ctx, FZ_ERROR_GENERIC, "cannot authenticate password: %s", argv[i]);
+			fz_layout_document(ctx, doc, layout_w, layout_h, layout_em);
+			count = fz_count_pages(ctx, doc);
 
-		if (i+1 < argc && fz_is_page_range(ctx, argv[i+1]))
-			runrange(argv[++i]);
-		else
-			runrange("1-N");
+			if (i+1 < argc && fz_is_page_range(ctx, argv[i+1]))
+				runrange(argv[++i]);
+			else
+				runrange("1-N");
 
-		fz_drop_document(ctx, doc);
+			fz_drop_document(ctx, doc);
+			doc = NULL;
+		}
 	}
+	fz_always(ctx)
+		fz_drop_document(ctx, doc);
+	fz_catch(ctx)
+		retval = EXIT_FAILURE;
 
 	fz_close_document_writer(ctx, out);
 
 	fz_drop_document_writer(ctx, out);
 	fz_drop_context(ctx);
-	return EXIT_SUCCESS;
+	return retval;
 }

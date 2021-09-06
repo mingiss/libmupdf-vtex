@@ -1,16 +1,17 @@
 #include "mupdf/fitz.h"
 #include "draw-imp.h"
-#include "glyph-cache-imp.h"
+#include "glyph-imp.h"
+#include "pixmap-imp.h"
+
+#include <string.h>
+#include <math.h>
 
 #define MAX_GLYPH_SIZE 256
 #define MAX_CACHE_SIZE (1024*1024)
 
 #define GLYPH_HASH_LEN 509
 
-typedef struct fz_glyph_cache_entry_s fz_glyph_cache_entry;
-typedef struct fz_glyph_key_s fz_glyph_key;
-
-struct fz_glyph_key_s
+typedef struct
 {
 	fz_font *font;
 	int a, b;
@@ -18,20 +19,20 @@ struct fz_glyph_key_s
 	unsigned short gid;
 	unsigned char e, f;
 	int aa;
-};
+} fz_glyph_key;
 
-struct fz_glyph_cache_entry_s
+typedef struct fz_glyph_cache_entry
 {
 	fz_glyph_key key;
 	unsigned hash;
-	fz_glyph_cache_entry *lru_prev;
-	fz_glyph_cache_entry *lru_next;
-	fz_glyph_cache_entry *bucket_next;
-	fz_glyph_cache_entry *bucket_prev;
+	struct fz_glyph_cache_entry *lru_prev;
+	struct fz_glyph_cache_entry *lru_next;
+	struct fz_glyph_cache_entry *bucket_next;
+	struct fz_glyph_cache_entry *bucket_prev;
 	fz_glyph *val;
-};
+} fz_glyph_cache_entry;
 
-struct fz_glyph_cache_s
+struct fz_glyph_cache
 {
 	int refs;
 	size_t total;
@@ -43,6 +44,14 @@ struct fz_glyph_cache_s
 	fz_glyph_cache_entry *lru_head;
 	fz_glyph_cache_entry *lru_tail;
 };
+
+static size_t
+fz_glyph_size(fz_context *ctx, fz_glyph *glyph)
+{
+	if (glyph == NULL)
+		return 0;
+	return sizeof(fz_glyph) + glyph->size + fz_pixmap_size(ctx, glyph->pixmap);
+}
 
 void
 fz_new_glyph_cache_context(fz_context *ctx)
@@ -134,7 +143,7 @@ fz_keep_glyph_cache(fz_context *ctx)
 float
 fz_subpixel_adjust(fz_context *ctx, fz_matrix *ctm, fz_matrix *subpix_ctm, unsigned char *qe, unsigned char *qf)
 {
-	float size = fz_matrix_expansion(ctm);
+	float size = fz_matrix_expansion(*ctm);
 	int q;
 	float pix_e, pix_f, r;
 
@@ -174,7 +183,7 @@ fz_subpixel_adjust(fz_context *ctx, fz_matrix *ctm, fz_matrix *subpix_ctm, unsig
 }
 
 fz_glyph *
-fz_render_stroked_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *trm, const fz_matrix *ctm, const fz_stroke_state *stroke, const fz_irect *scissor)
+fz_render_stroked_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *trm, fz_matrix ctm, const fz_stroke_state *stroke, const fz_irect *scissor, int aa)
 {
 	if (fz_font_ft_face(ctx, font))
 	{
@@ -184,25 +193,9 @@ fz_render_stroked_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *trm,
 		if (stroke->dash_len > 0)
 			return NULL;
 		(void)fz_subpixel_adjust(ctx, trm, &subpix_trm, &qe, &qf);
-		return fz_render_ft_stroked_glyph(ctx, font, gid, &subpix_trm, ctm, stroke);
+		return fz_render_ft_stroked_glyph(ctx, font, gid, subpix_trm, ctm, stroke, aa);
 	}
-	return fz_render_glyph(ctx, font, gid, trm, NULL, scissor, 1);
-}
-
-fz_pixmap *
-fz_render_stroked_glyph_pixmap(fz_context *ctx, fz_font *font, int gid, fz_matrix *trm, const fz_matrix *ctm, const fz_stroke_state *stroke, const fz_irect *scissor)
-{
-	if (fz_font_ft_face(ctx, font))
-	{
-		fz_matrix subpix_trm;
-		unsigned char qe, qf;
-
-		if (stroke->dash_len > 0)
-			return NULL;
-		(void)fz_subpixel_adjust(ctx, trm, &subpix_trm, &qe, &qf);
-		return fz_render_ft_stroked_glyph_pixmap(ctx, font, gid, &subpix_trm, ctm, stroke);
-	}
-	return fz_render_glyph_pixmap(ctx, font, gid, trm, scissor);
+	return fz_render_glyph(ctx, font, gid, trm, NULL, scissor, 1, aa);
 }
 
 static unsigned do_hash(unsigned char *s, int len)
@@ -242,7 +235,7 @@ move_to_front(fz_glyph_cache *cache, fz_glyph_cache_entry *entry)
 }
 
 fz_glyph *
-fz_render_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, fz_colorspace *model, const fz_irect *scissor, int alpha)
+fz_render_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, fz_colorspace *model, const fz_irect *scissor, int alpha, int aa)
 {
 	fz_glyph_cache *cache;
 	fz_glyph_key key;
@@ -286,7 +279,7 @@ fz_render_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, fz_colo
 	key.b = subpix_ctm.b * 65536;
 	key.c = subpix_ctm.c * 65536;
 	key.d = subpix_ctm.d * 65536;
-	key.aa = fz_text_aa_level(ctx);
+	key.aa = aa;
 
 	hash = do_hash((unsigned char *)&key, sizeof(key)) % GLYPH_HASH_LEN;
 	fz_lock(ctx, FZ_LOCK_GLYPHCACHE);
@@ -311,7 +304,7 @@ fz_render_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, fz_colo
 	{
 		if (is_ft_font)
 		{
-			val = fz_render_ft_glyph(ctx, font, gid, &subpix_ctm, key.aa);
+			val = fz_render_ft_glyph(ctx, font, gid, subpix_ctm, aa);
 		}
 		else if (fz_font_t3_procs(ctx, font))
 		{
@@ -326,7 +319,7 @@ fz_render_glyph(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, fz_colo
 			 */
 			fz_unlock(ctx, FZ_LOCK_GLYPHCACHE);
 			locked = 0;
-			val = fz_render_t3_glyph(ctx, font, gid, &subpix_ctm, model, scissor);
+			val = fz_render_t3_glyph(ctx, font, gid, subpix_ctm, model, scissor, aa);
 			fz_lock(ctx, FZ_LOCK_GLYPHCACHE);
 			locked = 1;
 		}
@@ -408,9 +401,9 @@ unlock_and_return_val:
 }
 
 fz_pixmap *
-fz_render_glyph_pixmap(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, const fz_irect *scissor)
+fz_render_glyph_pixmap(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, const fz_irect *scissor, int aa)
 {
-	fz_pixmap *val;
+	fz_pixmap *val = NULL;
 	unsigned char qe, qf;
 	fz_matrix subpix_ctm;
 	float size = fz_subpixel_adjust(ctx, ctm, &subpix_ctm, &qe, &qf);
@@ -426,37 +419,29 @@ fz_render_glyph_pixmap(fz_context *ctx, fz_font *font, int gid, fz_matrix *ctm, 
 			return NULL;
 	}
 
-	fz_try(ctx)
+	if (is_ft_font)
 	{
-		if (is_ft_font)
-		{
-			val = fz_render_ft_glyph_pixmap(ctx, font, gid, &subpix_ctm, fz_text_aa_level(ctx));
-		}
-		else if (fz_font_t3_procs(ctx, font))
-		{
-			val = fz_render_t3_glyph_pixmap(ctx, font, gid, &subpix_ctm, NULL, scissor);
-		}
-		else
-		{
-			fz_warn(ctx, "assert: uninitialized font structure");
-			val = NULL;
-		}
+		val = fz_render_ft_glyph_pixmap(ctx, font, gid, subpix_ctm, aa);
 	}
-	fz_catch(ctx)
+	else if (fz_font_t3_procs(ctx, font))
 	{
-		fz_rethrow(ctx);
+		val = fz_render_t3_glyph_pixmap(ctx, font, gid, subpix_ctm, NULL, scissor, aa);
+	}
+	else
+	{
+		fz_warn(ctx, "assert: uninitialized font structure");
+		val = NULL;
 	}
 
 	return val;
 }
 
 void
-fz_dump_glyph_cache_stats(fz_context *ctx)
+fz_dump_glyph_cache_stats(fz_context *ctx, fz_output *out)
 {
 	fz_glyph_cache *cache = ctx->glyph_cache;
-
-	fprintf(stderr, "Glyph Cache Size: " FMT_zu "\n", cache->total);
+	fz_write_printf(ctx, out, "Glyph Cache Size: %zu\n", cache->total);
 #ifndef NDEBUG
-	fprintf(stderr, "Glyph Cache Evictions: %d (" FMT_zu " bytes)\n", cache->num_evictions, cache->evicted);
+	fz_write_printf(ctx, out, "Glyph Cache Evictions: %d (%zu bytes)\n", cache->num_evictions, cache->evicted);
 #endif
 }

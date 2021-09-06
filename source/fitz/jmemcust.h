@@ -13,6 +13,9 @@
  * CA 94903, U.S.A., +1(415)492-9861, for further information.
  */
 
+ #ifndef MUPDF_JMEMCUST_H
+ #define MUPDF_JMEMCUST_H
+
 typedef JMETHOD(long, j_custmem_init_ptr, (j_common_ptr cinfo));
 typedef JMETHOD(void, j_custmem_term_ptr, (j_common_ptr cinfo));
 typedef JMETHOD(long, j_custmem_avail_ptr, (j_common_ptr cinfo));
@@ -47,5 +50,4 @@ GLOBAL(jpeg_cust_mem_data *)
 			j_custmem_free_large_ptr free_large,
 			j_custmem_open_backing_store_ptr open_backing_store);
 
-GLOBAL(jpeg_cust_mem_data *)
-	jpeg_cust_mem_set_private(jpeg_cust_mem_data *custm, void *priv);
+#endif
