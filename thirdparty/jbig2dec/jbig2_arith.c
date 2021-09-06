@@ -1,4 +1,4 @@
-/* Copyright (C) 2001-2012 Artifex Software, Inc.
+/* Copyright (C) 2001-2020 Artifex Software, Inc.
    All Rights Reserved.
 
    This software is provided AS-IS with no warranty, either express or
@@ -9,8 +9,8 @@
    of the license contained in the file LICENSE in this distribution.
 
    Refer to licensing information at http://www.artifex.com or contact
-   Artifex Software, Inc.,  7 Mt. Lassen Drive - Suite A-134, San Rafael,
-   CA  94903, U.S.A., +1(415)492-9861, for further information.
+   Artifex Software, Inc.,  1305 Grant Avenue - Suite 200, Novato,
+   CA 94945, U.S.A., +1(415)492-9861, for further information.
 */
 
 /*
@@ -31,86 +31,109 @@
 
 struct _Jbig2ArithState {
     uint32_t C;
-    int A;
+    uint32_t A;
 
     int CT;
 
     uint32_t next_word;
-    int next_word_bytes;
+    size_t next_word_bytes;
+    int err;
 
     Jbig2WordStream *ws;
-    int offset;
-
-    Jbig2Ctx *ctx;
+    size_t offset;
 };
 
-#undef SOFTWARE_CONVENTION
-
 /*
-  A note on the "software conventions".
-
-  Previously, I had misinterpreted the spec, and had thought that the
-  spec's description of the "software convention" was wrong. Now I
-  believe that this code is both correct and matches the spec, with
-  SOFTWARE_CONVENTION defined or not. Thanks to William Rucklidge for
-  the clarification.
-
-  In any case, my benchmarking indicates no speed difference at all.
-  Therefore, for now we will just use the normative version.
-
- */
+  Previous versions of this code had a #define to allow
+  us to choose between using the revised arithmetic decoding
+  specified in the 'Software Convention' section of the spec.
+  Back to back tests showed that the 'Software Convention'
+  version was indeed slightly faster. We therefore enable it
+  by default. We also strip the option out, because a) it
+  makes the code harder to read, and b) such things are an
+  invitation to bitrot.
+*/
 
 static int
-jbig2_arith_bytein(Jbig2ArithState *as)
+jbig2_arith_bytein(Jbig2Ctx *ctx, Jbig2ArithState *as)
 {
     byte B;
 
-    /* invariant: as->next_word_bytes > 0 */
+    /* Treat both errors and reading beyond end of stream as an error. */
+    if (as->err != 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to read from underlying stream during arithmetic decoding");
+        return -1;
+    }
+    if (as->next_word_bytes == 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to read beyond end of underlying stream during arithmetic decoding");
+        return -1;
+    }
 
-    /* Figure G.3 */
+    /* At this point there is at least one byte in as->next_word. */
+
+    /* This code confused me no end when I first read it, so a quick note
+     * to save others (and future me's) from being similarly confused.
+     * 'next_word' does indeed contain 'next_word_bytes' of valid data
+     * (always starting at the most significant byte). The confusing
+     * thing is that the first byte has always already been read.
+     * i.e. it serves only as an indication that the last byte we read
+     * was FF or not.
+     *
+     * The jbig2 bytestream uses FF bytes, followed by a byte > 0x8F as
+     * marker bytes. These never occur in normal streams of arithmetic
+     * encoding, so meeting one terminates the stream (with an infinite
+     * series of 1 bits).
+     *
+     * If we meet an FF byte, we return it as normal. We just 'remember'
+     * that fact for the next byte we read.
+     */
+
+    /* Figure F.3 */
     B = (byte)((as->next_word >> 24) & 0xFF);
     if (B == 0xFF) {
         byte B1;
 
-        if (as->next_word_bytes == 1) {
-            Jbig2WordStream *ws = as->ws;
-
-            if (ws->get_next_word(ws, as->offset, &as->next_word)) {
-                jbig2_error(as->ctx, JBIG2_SEVERITY_FATAL, -1, "end of jbig2 buffer reached at offset %d", as->offset);
-                return -1;
+        /* next_word_bytes can only be == 1 here, but let's be defensive. */
+        if (as->next_word_bytes <= 1) {
+            int ret = as->ws->get_next_word(ctx, as->ws, as->offset, &as->next_word);
+            if (ret < 0) {
+                as->err = 1;
+                return jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to check for marker code due to failure in underlying stream during arithmetic decoding");
             }
-            as->offset += 4;
+            as->next_word_bytes = (size_t) ret;
+
+            if (as->next_word_bytes == 0) {
+                jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to read end of possible terminating marker code, assuming terminating marker code");
+                as->next_word = 0xFF900000;
+                as->next_word_bytes = 2;
+                as->C += 0xFF00;
+                as->CT = 8;
+                return 0;
+            }
+
+            as->offset += as->next_word_bytes;
+
             B1 = (byte)((as->next_word >> 24) & 0xFF);
             if (B1 > 0x8F) {
 #ifdef JBIG2_DEBUG_ARITH
                 fprintf(stderr, "read %02x (aa)\n", B);
 #endif
-#ifndef SOFTWARE_CONVENTION
-                as->C += 0xFF00;
-#endif
                 as->CT = 8;
-                as->next_word = (0xFF00 | B1) << 16;
+                as->next_word = 0xFF000000 | (as->next_word >> 8);
                 as->next_word_bytes = 2;
+                as->offset--;
             } else {
 #ifdef JBIG2_DEBUG_ARITH
                 fprintf(stderr, "read %02x (a)\n", B);
 #endif
-#ifdef SOFTWARE_CONVENTION
                 as->C += 0xFE00 - (B1 << 9);
-#else
-                as->C += B1 << 9;
-#endif
                 as->CT = 7;
-                as->next_word_bytes = 4;
             }
         } else {
             B1 = (byte)((as->next_word >> 16) & 0xFF);
             if (B1 > 0x8F) {
 #ifdef JBIG2_DEBUG_ARITH
                 fprintf(stderr, "read %02x (ba)\n", B);
-#endif
-#ifndef SOFTWARE_CONVENTION
-                as->C += 0xFF00;
 #endif
                 as->CT = 8;
             } else {
@@ -120,11 +143,7 @@ jbig2_arith_bytein(Jbig2ArithState *as)
                 fprintf(stderr, "read %02x (b)\n", B);
 #endif
 
-#ifdef SOFTWARE_CONVENTION
                 as->C += 0xFE00 - (B1 << 9);
-#else
-                as->C += (B1 << 9);
-#endif
                 as->CT = 7;
             }
         }
@@ -132,36 +151,36 @@ jbig2_arith_bytein(Jbig2ArithState *as)
 #ifdef JBIG2_DEBUG_ARITH
         fprintf(stderr, "read %02x\n", B);
 #endif
-        as->CT = 8;
         as->next_word <<= 8;
         as->next_word_bytes--;
-        if (as->next_word_bytes == 0) {
-            Jbig2WordStream *ws = as->ws;
 
-            if (ws->get_next_word(ws, as->offset, &as->next_word)) {
-                jbig2_error(as->ctx, JBIG2_SEVERITY_FATAL, -1, "end of jbig2 buffer reached at offset %d", as->offset);
-                return -1;
+        if (as->next_word_bytes == 0) {
+            int ret = as->ws->get_next_word(ctx, as->ws, as->offset, &as->next_word);
+            if (ret < 0) {
+                as->err = 1;
+                return jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to read from underlying stream during arithmetic decoding");
             }
-            as->offset += 4;
-            as->next_word_bytes = 4;
+            as->next_word_bytes = (size_t) ret;
+
+            if (as->next_word_bytes == 0) {
+                jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to find terminating marker code before end of underlying stream, assuming terminating marker code");
+                as->next_word = 0xFF900000;
+                as->next_word_bytes = 2;
+                as->C += 0xFF00;
+                as->CT = 8;
+                return 0;
+            }
+
+            as->offset += as->next_word_bytes;
         }
+
         B = (byte)((as->next_word >> 24) & 0xFF);
-#ifdef SOFTWARE_CONVENTION
         as->C += 0xFF00 - (B << 8);
-#else
-        as->C += (B << 8);
-#endif
+        as->CT = 8;
     }
+
     return 0;
 }
-
-#if defined(JBIG2_DEBUG) || defined(JBIG2_DEBUG_ARITH)
-static void
-jbig2_arith_trace(Jbig2ArithState *as, Jbig2ArithCx cx)
-{
-    fprintf(stderr, "I = %2d, MPS = %d, A = %04x, CT = %2d, C = %08x\n", cx & 0x7f, cx >> 7, as->A, as->CT, as->C);
-}
-#endif
 
 /** Allocate and initialize a new arithmetic coding state
  *  the returned pointer can simply be freed; this does
@@ -171,35 +190,45 @@ Jbig2ArithState *
 jbig2_arith_new(Jbig2Ctx *ctx, Jbig2WordStream *ws)
 {
     Jbig2ArithState *result;
+    int ret;
 
     result = jbig2_new(ctx, Jbig2ArithState, 1);
     if (result == NULL) {
-        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate Jbig2ArithState in jbig2_arith_new");
-        return result;
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to allocate arithmetic coding state");
+        return NULL;
     }
 
+    result->err = 0;
     result->ws = ws;
-    result->ctx = ctx;
+    result->offset = 0;
 
-    if (ws->get_next_word(ws, 0, &result->next_word)) {
-        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "unable to get first word in jbig2_arith_new");
+    ret = result->ws->get_next_word(ctx, result->ws, result->offset, &result->next_word);
+    if (ret < 0) {
         jbig2_free(ctx->allocator, result);
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to initialize underlying stream of arithmetic decoder");
         return NULL;
     }
-    result->next_word_bytes = 4;
-    result->offset = 4;
 
-    /* Figure E.20 */
-#ifdef SOFTWARE_CONVENTION
+    result->next_word_bytes = (size_t) ret;
+    if (result->next_word_bytes == 0) {
+        jbig2_free(ctx->allocator, result);
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to read first byte from underlying stream when initializing arithmetic decoder");
+        return NULL;
+    }
+
+    result->offset += result->next_word_bytes;
+
+    /* Figure F.1 */
     result->C = (~(result->next_word >> 8)) & 0xFF0000;
-#else
-    result->C = (result->next_word >> 8) & 0xFF0000;
-#endif
 
-    if (jbig2_arith_bytein(result)) {
+    /* Figure E.20 (2) */
+    if (jbig2_arith_bytein(ctx, result) < 0) {
         jbig2_free(ctx->allocator, result);
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to read second byte from underlying stream when initializing arithmetic decoder");
         return NULL;
     }
+
+    /* Figure E.20 (3) */
     result->C <<= 7;
     result->CT -= 7;
     result->A = 0x8000;
@@ -211,12 +240,12 @@ jbig2_arith_new(Jbig2Ctx *ctx, Jbig2WordStream *ws)
 
 /* could put bit fields in to minimize memory usage */
 typedef struct {
-    unsigned short Qe;
+    uint16_t Qe;
     byte mps_xor;               /* mps_xor = index ^ NMPS */
     byte lps_xor;               /* lps_xor = index ^ NLPS ^ (SWITCH << 7) */
 } Jbig2ArithQe;
 
-const Jbig2ArithQe jbig2_arith_Qe[MAX_QE_ARRAY_SIZE] = {
+static const Jbig2ArithQe jbig2_arith_Qe[MAX_QE_ARRAY_SIZE] = {
     {0x5601, 1 ^ 0, 1 ^ 0 ^ 0x80},
     {0x3401, 2 ^ 1, 6 ^ 1},
     {0x1801, 3 ^ 2, 9 ^ 2},
@@ -267,21 +296,23 @@ const Jbig2ArithQe jbig2_arith_Qe[MAX_QE_ARRAY_SIZE] = {
 };
 
 static int
-jbig2_arith_renormd(Jbig2ArithState *as)
+jbig2_arith_renormd(Jbig2Ctx *ctx, Jbig2ArithState *as)
 {
     /* Figure E.18 */
     do {
-        if ((as->CT == 0) && (jbig2_arith_bytein(as) < 0))
-            return -1;
+        if (as->CT == 0 && jbig2_arith_bytein(ctx, as) < 0) {
+            return jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to read byte from compressed data stream");
+        }
         as->A <<= 1;
         as->C <<= 1;
         as->CT--;
     } while ((as->A & 0x8000) == 0);
+
     return 0;
 }
 
-bool
-jbig2_arith_decode(Jbig2ArithState *as, Jbig2ArithCx *pcx)
+int
+jbig2_arith_decode(Jbig2Ctx *ctx, Jbig2ArithState *as, Jbig2ArithCx *pcx)
 {
     Jbig2ArithCx cx = *pcx;
     const Jbig2ArithQe *pqe;
@@ -289,24 +320,14 @@ jbig2_arith_decode(Jbig2ArithState *as, Jbig2ArithCx *pcx)
     bool D;
 
     if (index >= MAX_QE_ARRAY_SIZE) {
-        return -1;
-    } else {
-        pqe = &jbig2_arith_Qe[index];
+        return jbig2_error(ctx, JBIG2_SEVERITY_FATAL, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to determine probability estimate because index out of range");
     }
 
-    /* Figure E.15 */
+    pqe = &jbig2_arith_Qe[index];
+
+    /* Figure F.2 */
     as->A -= pqe->Qe;
-    if (
-#ifdef SOFTWARE_CONVENTION
-        /* Note: I do not think this is correct. See above. */
-        (as->C >> 16) < as->A
-#else
-        !((as->C >> 16) < pqe->Qe)
-#endif
-    ) {
-#ifndef SOFTWARE_CONVENTION
-        as->C -= pqe->Qe << 16;
-#endif
+    if ((as->C >> 16) < as->A) {
         if ((as->A & 0x8000) == 0) {
             /* MPS_EXCHANGE, Figure E.16 */
             if (as->A < pqe->Qe) {
@@ -316,15 +337,16 @@ jbig2_arith_decode(Jbig2ArithState *as, Jbig2ArithCx *pcx)
                 D = cx >> 7;
                 *pcx ^= pqe->mps_xor;
             }
-            if (jbig2_arith_renormd(as))
-                return -1;
+            if (jbig2_arith_renormd(ctx, as) < 0) {
+                return jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to renormalize decoder");
+            }
+
             return D;
-        } else
+        } else {
             return cx >> 7;
+        }
     } else {
-#ifdef SOFTWARE_CONVENTION
         as->C -= (as->A) << 16;
-#endif
         /* LPS_EXCHANGE, Figure E.17 */
         if (as->A < pqe->Qe) {
             as->A = pqe->Qe;
@@ -335,33 +357,60 @@ jbig2_arith_decode(Jbig2ArithState *as, Jbig2ArithCx *pcx)
             D = 1 - (cx >> 7);
             *pcx ^= pqe->lps_xor;
         }
-        if (jbig2_arith_renormd(as))
-            return -1;
+        if (jbig2_arith_renormd(ctx, as) < 0) {
+            return jbig2_error(ctx, JBIG2_SEVERITY_WARNING, JBIG2_UNKNOWN_SEGMENT_NUMBER, "failed to renormalize decoder");
+        }
+
         return D;
     }
 }
 
-bool
-jbig2_arith_has_reached_marker(Jbig2ArithState *as)
-{
-    return as->next_word_bytes == 2 && (as->next_word >> 16) > 0xFF8F;
-}
-
 #ifdef TEST
 
-static int
-test_get_word(Jbig2WordStream *self, int offset, uint32_t *word)
+static const byte test_stream[] = {
+    0x84, 0xC7, 0x3B, 0xFC, 0xE1, 0xA1, 0x43, 0x04, 0x02, 0x20, 0x00, 0x00,
+    0x41, 0x0D, 0xBB, 0x86, 0xF4, 0x31, 0x7F, 0xFF, 0x88, 0xFF, 0x37, 0x47,
+    0x1A, 0xDB, 0x6A, 0xDF, 0xFF, 0xAC,
+    0x00, 0x00
+};
+
+#if defined(JBIG2_DEBUG) || defined(JBIG2_DEBUG_ARITH)
+static void
+jbig2_arith_trace(Jbig2ArithState *as, Jbig2ArithCx cx)
 {
-    byte stream[] = {
-        0x84, 0xC7, 0x3B, 0xFC, 0xE1, 0xA1, 0x43, 0x04, 0x02, 0x20, 0x00, 0x00,
-        0x41, 0x0D, 0xBB, 0x86, 0xF4, 0x31, 0x7F, 0xFF, 0x88, 0xFF, 0x37, 0x47,
-        0x1A, 0xDB, 0x6A, 0xDF, 0xFF, 0xAC,
-        0x00, 0x00
-    };
-    if (offset >= sizeof(stream))
+    fprintf(stderr, "I = %2d, MPS = %d, A = %04x, CT = %2d, C = %08x\n", cx & 0x7f, cx >> 7, as->A, as->CT, as->C);
+}
+#endif
+
+static int
+test_get_word(Jbig2Ctx *ctx, Jbig2WordStream *self, size_t offset, uint32_t *word)
+{
+    uint32_t val = 0;
+    int ret = 0;
+
+    if (self == NULL || word == NULL)
         return -1;
-    *word = (stream[offset] << 24) | (stream[offset + 1] << 16) | (stream[offset + 2] << 8) | stream[offset + 3];
-    return 0;
+    if (offset >= sizeof (test_stream))
+        return 0;
+
+    if (offset < sizeof(test_stream)) {
+        val |= test_stream[offset] << 24;
+        ret++;
+    }
+    if (offset + 1 < sizeof(test_stream)) {
+        val |= test_stream[offset + 1] << 16;
+        ret++;
+    }
+    if (offset + 2 < sizeof(test_stream)) {
+        val |= test_stream[offset + 2] << 8;
+        ret++;
+    }
+    if (offset + 3 < sizeof(test_stream)) {
+        val |= test_stream[offset + 3];
+        ret++;
+    }
+    *word = val;
+    return ret;
 }
 
 int
@@ -383,11 +432,11 @@ main(int argc, char **argv)
 
     for (i = 0; i < 256; i++) {
 #ifdef JBIG2_DEBUG_ARITH
-        bool D =
+        int D =
 #else
         (void)
 #endif
-            jbig2_arith_decode(as, &cx);
+            jbig2_arith_decode(ctx, as, &cx);
 
 #ifdef JBIG2_DEBUG_ARITH
         fprintf(stderr, "%3d: D = %d, ", i, D);

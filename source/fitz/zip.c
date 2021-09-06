@@ -1,4 +1,6 @@
-#include "fitz-imp.h"
+#include "mupdf/fitz.h"
+
+#include <string.h>
 
 #include <zlib.h>
 
@@ -10,7 +12,7 @@
 #define ZIP_CENTRAL_DIRECTORY_SIG 0x02014b50
 #define ZIP_END_OF_CENTRAL_DIRECTORY_SIG 0x06054b50
 
-struct fz_zip_writer_s
+struct fz_zip_writer
 {
 	fz_output *output;
 	fz_buffer *central;
@@ -66,7 +68,7 @@ fz_write_zip_entry(fz_context *ctx, fz_zip_writer *zip, const char *name, fz_buf
 void
 fz_close_zip_writer(fz_context *ctx, fz_zip_writer *zip)
 {
-	fz_off_t offset = fz_tell_output(ctx, zip->output);
+	int64_t offset = fz_tell_output(ctx, zip->output);
 
 	fz_write_data(ctx, zip->output, zip->central->data, zip->central->len);
 
@@ -80,6 +82,8 @@ fz_close_zip_writer(fz_context *ctx, fz_zip_writer *zip)
 	fz_write_int16_le(ctx, zip->output, 5); /* zip file comment length */
 
 	fz_write_data(ctx, zip->output, "MuPDF", 5);
+
+	fz_close_output(ctx, zip->output);
 
 	zip->closed = 1;
 }
@@ -97,19 +101,33 @@ fz_drop_zip_writer(fz_context *ctx, fz_zip_writer *zip)
 }
 
 fz_zip_writer *
-fz_new_zip_writer(fz_context *ctx, const char *filename)
+fz_new_zip_writer_with_output(fz_context *ctx, fz_output *out)
 {
 	fz_zip_writer *zip = fz_malloc_struct(ctx, fz_zip_writer);
 	fz_try(ctx)
 	{
-		zip->output = fz_new_output_with_path(ctx, filename, 0);
+		zip->output = out;
 		zip->central = fz_new_buffer(ctx, 0);
 	}
 	fz_catch(ctx)
 	{
-		fz_drop_output(ctx, zip->output);
 		fz_drop_buffer(ctx, zip->central);
 		fz_free(ctx, zip);
+		fz_rethrow(ctx);
+	}
+	return zip;
+}
+
+fz_zip_writer *
+fz_new_zip_writer(fz_context *ctx, const char *filename)
+{
+	fz_output *out = fz_new_output_with_path(ctx, filename, 0);
+	fz_zip_writer *zip = NULL;
+	fz_try(ctx)
+		zip = fz_new_zip_writer_with_output(ctx, out);
+	fz_catch(ctx)
+	{
+		fz_drop_output(ctx, out);
 		fz_rethrow(ctx);
 	}
 	return zip;

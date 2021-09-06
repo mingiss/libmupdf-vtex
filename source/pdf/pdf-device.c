@@ -1,3 +1,4 @@
+#include "mupdf/fitz.h"
 #include "mupdf/pdf.h"
 
 #include <ft2build.h>
@@ -6,11 +7,9 @@
 
 #define ALLOWED_TEXT_POS_ERROR (0.001f)
 
-typedef struct pdf_device_s pdf_device;
+typedef struct pdf_device pdf_device;
 
-typedef struct gstate_s gstate;
-
-struct gstate_s
+typedef struct
 {
 	/* The first few entries aren't really graphics state things, but
 	 * they are recorded here as they are fundamentally intertwined with
@@ -26,9 +25,10 @@ struct gstate_s
 	float alpha[2];
 	fz_stroke_state *stroke_state;
 	int font;
+	float font_size;
 	int text_rendering_mode;
 	int knockout;
-};
+} gstate;
 
 /* The image digest information, object reference, as well as indirect reference
  * ID are all stored in doc->resources->image, and so they are maintained
@@ -40,32 +40,27 @@ struct gstate_s
  * already specified for this page which is the purpose of image_indices
  */
 
-typedef struct alpha_entry_s alpha_entry;
-
-struct alpha_entry_s
+typedef struct
 {
 	float alpha;
 	int stroke;
-};
+} alpha_entry;
 
-typedef struct group_entry_s group_entry;
-
-struct group_entry_s
+typedef struct
 {
 	int alpha;
 	int isolated;
 	int knockout;
 	fz_colorspace *colorspace;
 	pdf_obj *ref;
-};
+} group_entry;
 
-struct pdf_device_s
+struct pdf_device
 {
 	fz_device super;
 
 	pdf_document *doc;
 	pdf_obj *resources;
-	fz_buffer *buffer;
 
 	int in_text;
 
@@ -129,13 +124,14 @@ pdf_dev_stroke_state(fz_context *ctx, pdf_device *pdev, const fz_stroke_state *s
 		fz_append_printf(ctx, gs->buf, "%g M\n", stroke_state->miterlimit);
 	}
 	if (gs->stroke_state == NULL && stroke_state->dash_len == 0)
-	{}
+	{
+		/* No stroke details. */
+	}
 	else if (!gs->stroke_state || gs->stroke_state->dash_phase != stroke_state->dash_phase || gs->stroke_state->dash_len != stroke_state->dash_len ||
 		memcmp(gs->stroke_state->dash_list, stroke_state->dash_list, sizeof(float)*stroke_state->dash_len))
 	{
 		int i;
-		if (stroke_state->dash_len == 0)
-			fz_append_byte(ctx, gs->buf, '[');
+		fz_append_byte(ctx, gs->buf, '[');
 		for (i = 0; i < stroke_state->dash_len; i++)
 		{
 			if (i > 0)
@@ -199,21 +195,21 @@ pdf_dev_path(fz_context *ctx, pdf_device *pdev, const fz_path *path)
 }
 
 static void
-pdf_dev_ctm(fz_context *ctx, pdf_device *pdev, const fz_matrix *ctm)
+pdf_dev_ctm(fz_context *ctx, pdf_device *pdev, fz_matrix ctm)
 {
 	fz_matrix inverse;
 	gstate *gs = CURRENT_GSTATE(pdev);
 
-	if (memcmp(&gs->ctm, ctm, sizeof(*ctm)) == 0)
+	if (memcmp(&gs->ctm, &ctm, sizeof(ctm)) == 0)
 		return;
-	fz_invert_matrix(&inverse, &gs->ctm);
-	fz_concat(&inverse, ctm, &inverse);
-	gs->ctm = *ctm;
+	inverse = fz_invert_matrix(gs->ctm);
+	inverse = fz_concat(ctm, inverse);
+	gs->ctm = ctm;
 	fz_append_printf(ctx, gs->buf, "%M cm\n", &inverse);
 }
 
 static void
-pdf_dev_color(fz_context *ctx, pdf_device *pdev, fz_colorspace *colorspace, const float *color, int stroke)
+pdf_dev_color(fz_context *ctx, pdf_device *pdev, fz_colorspace *colorspace, const float *color, int stroke, fz_color_params color_params)
 {
 	int diff = 0;
 	int i;
@@ -231,7 +227,7 @@ pdf_dev_color(fz_context *ctx, pdf_device *pdev, fz_colorspace *colorspace, cons
 	if (cspace == 0)
 	{
 		/* If it's an unknown colorspace, fallback to rgb */
-		fz_convert_color(ctx, fz_device_rgb(ctx), rgb, colorspace, color);
+		fz_convert_color(ctx, colorspace, color, fz_device_rgb(ctx), rgb, NULL, color_params);
 		color = rgb;
 		colorspace = fz_device_rgb(ctx);
 		cspace = 3;
@@ -294,10 +290,7 @@ pdf_dev_alpha(fz_context *ctx, pdf_device *pdev, float alpha, int stroke)
 
 	if (i == pdev->num_alphas)
 	{
-		pdf_obj *o;
-		pdf_obj *ref = NULL;
-
-		fz_var(ref);
+		pdf_obj *o, *ref;
 
 		/* No. Need to make a new one */
 		if (pdev->num_alphas == pdev->max_alphas)
@@ -305,7 +298,7 @@ pdf_dev_alpha(fz_context *ctx, pdf_device *pdev, float alpha, int stroke)
 			int newmax = pdev->max_alphas * 2;
 			if (newmax == 0)
 				newmax = 4;
-			pdev->alphas = fz_resize_array(ctx, pdev->alphas, newmax, sizeof(*pdev->alphas));
+			pdev->alphas = fz_realloc_array(ctx, pdev->alphas, newmax, alpha_entry);
 			pdev->max_alphas = newmax;
 		}
 		pdev->alphas[i].alpha = alpha;
@@ -315,15 +308,14 @@ pdf_dev_alpha(fz_context *ctx, pdf_device *pdev, float alpha, int stroke)
 		fz_try(ctx)
 		{
 			char text[32];
-			pdf_dict_put_drop(ctx, o, (stroke ? PDF_NAME_CA : PDF_NAME_ca), pdf_new_real(ctx, doc, alpha));
-			ref = pdf_add_object(ctx, doc, o);
+			pdf_dict_put_real(ctx, o, (stroke ? PDF_NAME(CA) : PDF_NAME(ca)), alpha);
 			fz_snprintf(text, sizeof(text), "ExtGState/Alp%d", i);
-			pdf_dict_putp(ctx, pdev->resources, text, ref);
+			ref = pdf_add_object(ctx, doc, o);
+			pdf_dict_putp_drop(ctx, pdev->resources, text, ref);
 		}
 		fz_always(ctx)
 		{
 			pdf_drop_obj(ctx, o);
-			pdf_drop_obj(ctx, ref);
 		}
 		fz_catch(ctx)
 		{
@@ -360,7 +352,7 @@ pdf_dev_add_font_res(fz_context *ctx, pdf_device *pdev, fz_font *font)
 		int newmax = pdev->max_cid_fonts * 2;
 		if (newmax == 0)
 			newmax = 4;
-		pdev->cid_fonts = fz_resize_array(ctx, pdev->cid_fonts, newmax, sizeof(*pdev->cid_fonts));
+		pdev->cid_fonts = fz_realloc_array(ctx, pdev->cid_fonts, newmax, fz_font*);
 		pdev->max_cid_fonts = newmax;
 	}
 	num = pdev->num_cid_fonts++;
@@ -369,12 +361,13 @@ pdf_dev_add_font_res(fz_context *ctx, pdf_device *pdev, fz_font *font)
 }
 
 static void
-pdf_dev_font(fz_context *ctx, pdf_device *pdev, fz_font *font)
+pdf_dev_font(fz_context *ctx, pdf_device *pdev, fz_font *font, fz_matrix trm)
 {
 	gstate *gs = CURRENT_GSTATE(pdev);
+	float font_size = fz_matrix_expansion(trm);
 
 	/* If the font is unchanged, nothing to do */
-	if (gs->font >= 0 && pdev->cid_fonts[gs->font] == font)
+	if (gs->font >= 0 && pdev->cid_fonts[gs->font] == font && gs->font_size == font_size)
 		return;
 
 	if (fz_font_t3_procs(ctx, font))
@@ -385,8 +378,9 @@ pdf_dev_font(fz_context *ctx, pdf_device *pdev, fz_font *font)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "pdf device does not support font types found in this file");
 
 	gs->font = pdf_dev_add_font_res(ctx, pdev, font);
+	gs->font_size = font_size;
 
-	fz_append_printf(ctx, gs->buf, "/F%d 1 Tf\n", gs->font);
+	fz_append_printf(ctx, gs->buf, "/F%d %g Tf\n", gs->font, gs->font_size);
 }
 
 static void
@@ -395,8 +389,7 @@ pdf_dev_push_new_buf(fz_context *ctx, pdf_device *pdev, fz_buffer *buf, void (*o
 	if (pdev->num_gstates == pdev->max_gstates)
 	{
 		int newmax = pdev->max_gstates*2;
-
-		pdev->gstates = fz_resize_array(ctx, pdev->gstates, newmax, sizeof(*pdev->gstates));
+		pdev->gstates = fz_realloc_array(ctx, pdev->gstates, newmax, gstate);
 		pdev->max_gstates = newmax;
 	}
 	memcpy(&pdev->gstates[pdev->num_gstates], &pdev->gstates[pdev->num_gstates-1], sizeof(*pdev->gstates));
@@ -436,7 +429,8 @@ static void
 pdf_dev_text_span(fz_context *ctx, pdf_device *pdev, fz_text_span *span)
 {
 	gstate *gs = CURRENT_GSTATE(pdev);
-	fz_matrix tm, inv_tm;
+	fz_matrix trm, tm, tlm, inv_trm, inv_tm;
+	fz_matrix inv_tfs;
 	fz_point d;
 	float adv;
 	int dx, dy;
@@ -445,11 +439,17 @@ pdf_dev_text_span(fz_context *ctx, pdf_device *pdev, fz_text_span *span)
 	if (span->len == 0)
 		return;
 
-	tm = span->trm;
-	tm.e = span->items[0].x;
-	tm.f = span->items[0].y;
+	inv_tfs = fz_scale(1 / gs->font_size, 1 / gs->font_size);
 
-	fz_invert_matrix(&inv_tm, &tm);
+	trm = span->trm;
+	trm.e = span->items[0].x;
+	trm.f = span->items[0].y;
+
+	tm = fz_concat(inv_tfs, trm);
+	tlm = tm;
+
+	inv_tm = fz_invert_matrix(tm);
+	inv_trm = fz_invert_matrix(trm);
 
 	fz_append_printf(ctx, gs->buf, "%M Tm\n[<", &tm);
 
@@ -460,14 +460,14 @@ pdf_dev_text_span(fz_context *ctx, pdf_device *pdev, fz_text_span *span)
 			continue;
 
 		/* transform difference from expected pen position into font units. */
-		d.x = it->x - tm.e;
-		d.y = it->y - tm.f;
-		fz_transform_vector(&d, &inv_tm);
+		d.x = it->x - trm.e;
+		d.y = it->y - trm.f;
+		d = fz_transform_vector(d, inv_trm);
 		dx = (int)(d.x * 1000 + (d.x < 0 ? -0.5f : 0.5f));
 		dy = (int)(d.y * 1000 + (d.y < 0 ? -0.5f : 0.5f));
 
-		tm.e = it->x;
-		tm.f = it->y;
+		trm.e = it->x;
+		trm.f = it->y;
 
 		if (dx != 0 || dy != 0)
 		{
@@ -476,7 +476,15 @@ pdf_dev_text_span(fz_context *ctx, pdf_device *pdev, fz_text_span *span)
 			else if (span->wmode == 1 && dx == 0)
 				fz_append_printf(ctx, gs->buf, ">%d<", -dy);
 			else
-				fz_append_printf(ctx, gs->buf, ">]TJ\n%M Tm\n[<", &tm);
+			{
+				/* Calculate offset from start of the previous line */
+				tm = fz_concat(inv_tfs, trm);
+				d.x = tm.e - tlm.e;
+				d.y = tm.f - tlm.f;
+				d = fz_transform_vector(d, inv_tm);
+				fz_append_printf(ctx, gs->buf, ">]TJ\n%g %g Td\n[<", d.x, d.y);
+				tlm = tm;
+			}
 		}
 
 		if (fz_font_t3_procs(ctx, span->font))
@@ -486,9 +494,9 @@ pdf_dev_text_span(fz_context *ctx, pdf_device *pdev, fz_text_span *span)
 
 		adv = fz_advance_glyph(ctx, span->font, it->gid, span->wmode);
 		if (span->wmode == 0)
-			fz_pre_translate(&tm, adv, 0);
+			trm = fz_pre_translate(trm, adv, 0);
 		else
-			fz_pre_translate(&tm, 0, adv);
+			trm = fz_pre_translate(trm, 0, adv);
 	}
 
 	fz_append_string(ctx, gs->buf, ">]TJ\n");
@@ -506,7 +514,7 @@ pdf_dev_trm(fz_context *ctx, pdf_device *pdev, int trm)
 }
 
 static void
-pdf_dev_begin_text(fz_context *ctx, pdf_device *pdev, const fz_matrix *tm, int trm)
+pdf_dev_begin_text(fz_context *ctx, pdf_device *pdev, int trm)
 {
 	pdf_dev_trm(ctx, pdev, trm);
 	if (!pdev->in_text)
@@ -529,11 +537,11 @@ pdf_dev_end_text(fz_context *ctx, pdf_device *pdev)
 }
 
 static int
-pdf_dev_new_form(fz_context *ctx, pdf_obj **form_ref, pdf_device *pdev, const fz_rect *bbox, int isolated, int knockout, float alpha, fz_colorspace *colorspace)
+pdf_dev_new_form(fz_context *ctx, pdf_obj **form_ref, pdf_device *pdev, fz_rect bbox, int isolated, int knockout, float alpha, fz_colorspace *colorspace)
 {
 	pdf_document *doc = pdev->doc;
 	int num;
-	pdf_obj *group_ref;
+	pdf_obj *group_ref = NULL;
 	pdf_obj *group;
 	pdf_obj *form;
 
@@ -558,7 +566,7 @@ pdf_dev_new_form(fz_context *ctx, pdf_obj **form_ref, pdf_device *pdev, const fz
 			int newmax = pdev->max_groups * 2;
 			if (newmax == 0)
 				newmax = 4;
-			pdev->groups = fz_resize_array(ctx, pdev->groups, newmax, sizeof(*pdev->groups));
+			pdev->groups = fz_realloc_array(ctx, pdev->groups, newmax, group_entry);
 			pdev->max_groups = newmax;
 		}
 		pdev->num_groups++;
@@ -570,19 +578,24 @@ pdf_dev_new_form(fz_context *ctx, pdf_obj **form_ref, pdf_device *pdev, const fz
 		group = pdf_new_dict(ctx, doc, 5);
 		fz_try(ctx)
 		{
-			int n = fz_colorspace_n(ctx, colorspace);
-			pdf_dict_put_drop(ctx, group, PDF_NAME_Type, PDF_NAME_Group);
-			pdf_dict_put_drop(ctx, group, PDF_NAME_S, PDF_NAME_Transparency);
-			pdf_dict_put_drop(ctx, group, PDF_NAME_K, pdf_new_bool(ctx, doc, knockout));
-			pdf_dict_put_drop(ctx, group, PDF_NAME_I, pdf_new_bool(ctx, doc, isolated));
-			if (n == 0)
-			{}
-			if (n == 1)
-				pdf_dict_put_drop(ctx, group, PDF_NAME_CS, PDF_NAME_DeviceGray);
-			else if (n == 4)
-				pdf_dict_put_drop(ctx, group, PDF_NAME_CS, PDF_NAME_DeviceCMYK);
-			else
-				pdf_dict_put_drop(ctx, group, PDF_NAME_CS, PDF_NAME_DeviceRGB);
+			pdf_dict_put(ctx, group, PDF_NAME(Type), PDF_NAME(Group));
+			pdf_dict_put(ctx, group, PDF_NAME(S), PDF_NAME(Transparency));
+			pdf_dict_put_bool(ctx, group, PDF_NAME(K), knockout);
+			pdf_dict_put_bool(ctx, group, PDF_NAME(I), isolated);
+			switch (fz_colorspace_type(ctx, colorspace))
+			{
+			case FZ_COLORSPACE_GRAY:
+				pdf_dict_put(ctx, group, PDF_NAME(CS), PDF_NAME(DeviceGray));
+				break;
+			case FZ_COLORSPACE_RGB:
+				pdf_dict_put(ctx, group, PDF_NAME(CS), PDF_NAME(DeviceRGB));
+				break;
+			case FZ_COLORSPACE_CMYK:
+				pdf_dict_put(ctx, group, PDF_NAME(CS), PDF_NAME(DeviceCMYK));
+				break;
+			default:
+				break;
+			}
 			group_ref = pdev->groups[num].ref = pdf_add_object(ctx, doc, group);
 		}
 		fz_always(ctx)
@@ -600,10 +613,10 @@ pdf_dev_new_form(fz_context *ctx, pdf_obj **form_ref, pdf_device *pdev, const fz
 	form = pdf_new_dict(ctx, doc, 4);
 	fz_try(ctx)
 	{
-		pdf_dict_put_drop(ctx, form, PDF_NAME_Subtype, PDF_NAME_Form);
-		pdf_dict_put(ctx, form, PDF_NAME_Group, group_ref);
-		pdf_dict_put_drop(ctx, form, PDF_NAME_FormType, pdf_new_int(ctx, doc, 1));
-		pdf_dict_put_drop(ctx, form, PDF_NAME_BBox, pdf_new_rect(ctx, doc, bbox));
+		pdf_dict_put(ctx, form, PDF_NAME(Subtype), PDF_NAME(Form));
+		pdf_dict_put(ctx, form, PDF_NAME(Group), group_ref);
+		pdf_dict_put_int(ctx, form, PDF_NAME(FormType), 1);
+		pdf_dict_put_rect(ctx, form, PDF_NAME(BBox), bbox);
 		*form_ref = pdf_add_object(ctx, doc, form);
 	}
 	fz_always(ctx)
@@ -629,30 +642,30 @@ pdf_dev_new_form(fz_context *ctx, pdf_obj **form_ref, pdf_device *pdev, const fz
 /* Entry points */
 
 static void
-pdf_dev_fill_path(fz_context *ctx, fz_device *dev, const fz_path *path, int even_odd, const fz_matrix *ctm,
-	fz_colorspace *colorspace, const float *color, float alpha)
+pdf_dev_fill_path(fz_context *ctx, fz_device *dev, const fz_path *path, int even_odd, fz_matrix ctm,
+	fz_colorspace *colorspace, const float *color, float alpha, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	gstate *gs = CURRENT_GSTATE(pdev);
 
 	pdf_dev_end_text(ctx, pdev);
 	pdf_dev_alpha(ctx, pdev, alpha, 0);
-	pdf_dev_color(ctx, pdev, colorspace, color, 0);
+	pdf_dev_color(ctx, pdev, colorspace, color, 0, color_params);
 	pdf_dev_ctm(ctx, pdev, ctm);
 	pdf_dev_path(ctx, pdev, path);
 	fz_append_string(ctx, gs->buf, (even_odd ? "f*\n" : "f\n"));
 }
 
 static void
-pdf_dev_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, const fz_stroke_state *stroke, const fz_matrix *ctm,
-	fz_colorspace *colorspace, const float *color, float alpha)
+pdf_dev_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, const fz_stroke_state *stroke, fz_matrix ctm,
+	fz_colorspace *colorspace, const float *color, float alpha, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	gstate *gs = CURRENT_GSTATE(pdev);
 
 	pdf_dev_end_text(ctx, pdev);
 	pdf_dev_alpha(ctx, pdev, alpha, 1);
-	pdf_dev_color(ctx, pdev, colorspace, color, 1);
+	pdf_dev_color(ctx, pdev, colorspace, color, 1, color_params);
 	pdf_dev_ctm(ctx, pdev, ctm);
 	pdf_dev_stroke_state(ctx, pdev, stroke);
 	pdf_dev_path(ctx, pdev, path);
@@ -660,7 +673,7 @@ pdf_dev_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, const 
 }
 
 static void
-pdf_dev_clip_path(fz_context *ctx, fz_device *dev, const fz_path *path, int even_odd, const fz_matrix *ctm, const fz_rect *scissor)
+pdf_dev_clip_path(fz_context *ctx, fz_device *dev, const fz_path *path, int even_odd, fz_matrix ctm, fz_rect scissor)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	gstate *gs;
@@ -674,7 +687,7 @@ pdf_dev_clip_path(fz_context *ctx, fz_device *dev, const fz_path *path, int even
 }
 
 static void
-pdf_dev_clip_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, const fz_stroke_state *stroke, const fz_matrix *ctm, const fz_rect *scissor)
+pdf_dev_clip_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, const fz_stroke_state *stroke, fz_matrix ctm, fz_rect scissor)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	gstate *gs;
@@ -692,80 +705,93 @@ pdf_dev_clip_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, c
 }
 
 static void
-pdf_dev_fill_text(fz_context *ctx, fz_device *dev, const fz_text *text, const fz_matrix *ctm,
-		fz_colorspace *colorspace, const float *color, float alpha)
+pdf_dev_fill_text(fz_context *ctx, fz_device *dev, const fz_text *text, fz_matrix ctm,
+		fz_colorspace *colorspace, const float *color, float alpha, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	fz_text_span *span;
 
+	pdf_dev_ctm(ctx, pdev, ctm);
+	pdf_dev_alpha(ctx, pdev, alpha, 0);
+	pdf_dev_color(ctx, pdev, colorspace, color, 0, color_params);
+
 	for (span = text->head; span; span = span->next)
 	{
-		fz_matrix trm = span->trm;
-		pdf_dev_begin_text(ctx, pdev, &trm, 0);
-		pdf_dev_font(ctx, pdev, span->font);
-		pdf_dev_ctm(ctx, pdev, ctm);
-		pdf_dev_alpha(ctx, pdev, alpha, 0);
-		pdf_dev_color(ctx, pdev, colorspace, color, 0);
+		pdf_dev_begin_text(ctx, pdev, 0);
+		pdf_dev_font(ctx, pdev, span->font, span->trm);
 		pdf_dev_text_span(ctx, pdev, span);
 	}
 }
 
 static void
-pdf_dev_stroke_text(fz_context *ctx, fz_device *dev, const fz_text *text, const fz_stroke_state *stroke, const fz_matrix *ctm,
-		fz_colorspace *colorspace, const float *color, float alpha)
+pdf_dev_stroke_text(fz_context *ctx, fz_device *dev, const fz_text *text, const fz_stroke_state *stroke, fz_matrix ctm,
+		fz_colorspace *colorspace, const float *color, float alpha, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	fz_text_span *span;
 
+	pdf_dev_ctm(ctx, pdev, ctm);
+	pdf_dev_alpha(ctx, pdev, alpha, 1);
+	pdf_dev_color(ctx, pdev, colorspace, color, 1, color_params);
+
 	for (span = text->head; span; span = span->next)
 	{
-		pdf_dev_begin_text(ctx, pdev, &span->trm, 1);
-		pdf_dev_font(ctx, pdev, span->font);
-		pdf_dev_ctm(ctx, pdev, ctm);
-		pdf_dev_alpha(ctx, pdev, alpha, 1);
-		pdf_dev_color(ctx, pdev, colorspace, color, 1);
+		pdf_dev_begin_text(ctx, pdev, 1);
+		pdf_dev_font(ctx, pdev, span->font, span->trm);
 		pdf_dev_text_span(ctx, pdev, span);
 	}
 }
 
 static void
-pdf_dev_clip_text(fz_context *ctx, fz_device *dev, const fz_text *text, const fz_matrix *ctm, const fz_rect *scissor)
+pdf_dev_clip_text(fz_context *ctx, fz_device *dev, const fz_text *text, fz_matrix ctm, fz_rect scissor)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	fz_text_span *span;
+
+	pdf_dev_end_text(ctx, pdev);
+	pdf_dev_push(ctx, pdev);
+
+	pdf_dev_ctm(ctx, pdev, ctm);
+
 	for (span = text->head; span; span = span->next)
 	{
-		pdf_dev_begin_text(ctx, pdev, &span->trm, 0);
-		pdf_dev_ctm(ctx, pdev, ctm);
-		pdf_dev_font(ctx, pdev, span->font);
+		pdf_dev_begin_text(ctx, pdev, 7);
+		pdf_dev_font(ctx, pdev, span->font, span->trm);
 		pdf_dev_text_span(ctx, pdev, span);
 	}
 }
 
 static void
-pdf_dev_clip_stroke_text(fz_context *ctx, fz_device *dev, const fz_text *text, const fz_stroke_state *stroke, const fz_matrix *ctm, const fz_rect *scissor)
+pdf_dev_clip_stroke_text(fz_context *ctx, fz_device *dev, const fz_text *text, const fz_stroke_state *stroke, fz_matrix ctm, fz_rect scissor)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	fz_text_span *span;
+
+	pdf_dev_end_text(ctx, pdev);
+	pdf_dev_push(ctx, pdev);
+
+	pdf_dev_ctm(ctx, pdev, ctm);
+
 	for (span = text->head; span; span = span->next)
 	{
-		pdf_dev_begin_text(ctx, pdev, &span->trm, 0);
-		pdf_dev_font(ctx, pdev, span->font);
-		pdf_dev_ctm(ctx, pdev, ctm);
+		pdf_dev_begin_text(ctx, pdev, 7);
+		pdf_dev_font(ctx, pdev, span->font, span->trm);
 		pdf_dev_text_span(ctx, pdev, span);
 	}
 }
 
 static void
-pdf_dev_ignore_text(fz_context *ctx, fz_device *dev, const fz_text *text, const fz_matrix *ctm)
+pdf_dev_ignore_text(fz_context *ctx, fz_device *dev, const fz_text *text, fz_matrix ctm)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	fz_text_span *span;
+
+	pdf_dev_ctm(ctx, pdev, ctm);
+
 	for (span = text->head; span; span = span->next)
 	{
-		pdf_dev_begin_text(ctx, pdev, &span->trm, 0);
-		pdf_dev_ctm(ctx, pdev, ctm);
-		pdf_dev_font(ctx, pdev, span->font);
+		pdf_dev_begin_text(ctx, pdev, 0);
+		pdf_dev_font(ctx, pdev, span->font, span->trm);
 		pdf_dev_text_span(ctx, pdev, span);
 	}
 }
@@ -795,7 +821,7 @@ pdf_dev_add_image_res(fz_context *ctx, fz_device *dev, pdf_obj *im_res)
 		int newmax = pdev->max_imgs * 2;
 		if (newmax == 0)
 			newmax = 4;
-		pdev->image_indices = fz_resize_array(ctx, pdev->image_indices, newmax, sizeof(*pdev->image_indices));
+		pdev->image_indices = fz_realloc_array(ctx, pdev->image_indices, newmax, int);
 		pdev->max_imgs = newmax;
 	}
 	num = pdev->num_imgs++;
@@ -803,35 +829,41 @@ pdf_dev_add_image_res(fz_context *ctx, fz_device *dev, pdf_obj *im_res)
 }
 
 static void
-pdf_dev_fill_image(fz_context *ctx, fz_device *dev, fz_image *image, const fz_matrix *ctm, float alpha)
+pdf_dev_fill_image(fz_context *ctx, fz_device *dev, fz_image *image, fz_matrix ctm, float alpha, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	pdf_obj *im_res;
 	gstate *gs = CURRENT_GSTATE(pdev);
-	fz_matrix local_ctm = *ctm;
 
 	pdf_dev_end_text(ctx, pdev);
-	im_res = pdf_add_image(ctx, pdev->doc, image, 0);
+	im_res = pdf_add_image(ctx, pdev->doc, image);
 	if (im_res == NULL)
 	{
 		fz_warn(ctx, "pdf_add_image: problem adding image resource");
 		return;
 	}
-	pdf_dev_alpha(ctx, pdev, alpha, 0);
 
-	/* PDF images are upside down, so fiddle the ctm */
-	fz_pre_scale(&local_ctm, 1, -1);
-	fz_pre_translate(&local_ctm, 0, -1);
-	pdf_dev_ctm(ctx, pdev, &local_ctm);
-	fz_append_printf(ctx, gs->buf, "/Img%d Do\n", pdf_to_num(ctx, im_res));
+	fz_try(ctx)
+	{
+		pdf_dev_alpha(ctx, pdev, alpha, 0);
 
-	/* Possibly add to page resources */
-	pdf_dev_add_image_res(ctx, dev, im_res);
-	pdf_drop_obj(ctx, im_res);
+		/* PDF images are upside down, so fiddle the ctm */
+		ctm = fz_pre_scale(ctm, 1, -1);
+		ctm = fz_pre_translate(ctm, 0, -1);
+		pdf_dev_ctm(ctx, pdev, ctm);
+		fz_append_printf(ctx, gs->buf, "/Img%d Do\n", pdf_to_num(ctx, im_res));
+
+		/* Possibly add to page resources */
+		pdf_dev_add_image_res(ctx, dev, im_res);
+	}
+	fz_always(ctx)
+		pdf_drop_obj(ctx, im_res);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 }
 
 static void
-pdf_dev_fill_shade(fz_context *ctx, fz_device *dev, fz_shade *shade, const fz_matrix *ctm, float alpha)
+pdf_dev_fill_shade(fz_context *ctx, fz_device *dev, fz_shade *shade, fz_matrix ctm, float alpha, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 
@@ -840,38 +872,44 @@ pdf_dev_fill_shade(fz_context *ctx, fz_device *dev, fz_shade *shade, const fz_ma
 }
 
 static void
-pdf_dev_fill_image_mask(fz_context *ctx, fz_device *dev, fz_image *image, const fz_matrix *ctm,
-		fz_colorspace *colorspace, const float *color, float alpha)
+pdf_dev_fill_image_mask(fz_context *ctx, fz_device *dev, fz_image *image, fz_matrix ctm,
+		fz_colorspace *colorspace, const float *color, float alpha, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	pdf_obj *im_res = NULL;
 	gstate *gs = CURRENT_GSTATE(pdev);
-	fz_matrix local_ctm = *ctm;
 
 	pdf_dev_end_text(ctx, pdev);
-	im_res = pdf_add_image(ctx, pdev->doc, image, 1);
+	im_res = pdf_add_image(ctx, pdev->doc, image);
 	if (im_res == NULL)
 	{
 		fz_warn(ctx, "pdf_add_image: problem adding image resource");
 		return;
 	}
-	fz_append_string(ctx, gs->buf, "q\n");
-	pdf_dev_alpha(ctx, pdev, alpha, 0);
-	pdf_dev_color(ctx, pdev, colorspace, color, 0);
 
-	/* PDF images are upside down, so fiddle the ctm */
-	fz_pre_scale(&local_ctm, 1, -1);
-	fz_pre_translate(&local_ctm, 0, -1);
-	pdf_dev_ctm(ctx, pdev, &local_ctm);
-	fz_append_printf(ctx, gs->buf, "/Img%d Do Q\n", pdf_to_num(ctx, im_res));
+	fz_try(ctx)
+	{
+		fz_append_string(ctx, gs->buf, "q\n");
+		pdf_dev_alpha(ctx, pdev, alpha, 0);
+		pdf_dev_color(ctx, pdev, colorspace, color, 0, color_params);
 
-	/* Possibly add to page resources */
-	pdf_dev_add_image_res(ctx, dev, im_res);
-	pdf_drop_obj(ctx, im_res);
+		/* PDF images are upside down, so fiddle the ctm */
+		ctm = fz_pre_scale(ctm, 1, -1);
+		ctm = fz_pre_translate(ctm, 0, -1);
+		pdf_dev_ctm(ctx, pdev, ctm);
+		fz_append_printf(ctx, gs->buf, "/Img%d Do Q\n", pdf_to_num(ctx, im_res));
+
+		/* Possibly add to page resources */
+		pdf_dev_add_image_res(ctx, dev, im_res);
+	}
+	fz_always(ctx)
+		pdf_drop_obj(ctx, im_res);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 }
 
 static void
-pdf_dev_clip_image_mask(fz_context *ctx, fz_device *dev, fz_image *image, const fz_matrix *ctm, const fz_rect *scissor)
+pdf_dev_clip_image_mask(fz_context *ctx, fz_device *dev, fz_image *image, fz_matrix ctm, fz_rect scissor)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 
@@ -891,17 +929,17 @@ pdf_dev_pop_clip(fz_context *ctx, fz_device *dev)
 }
 
 static void
-pdf_dev_begin_mask(fz_context *ctx, fz_device *dev, const fz_rect *bbox, int luminosity, fz_colorspace *colorspace, const float *color)
+pdf_dev_begin_mask(fz_context *ctx, fz_device *dev, fz_rect bbox, int luminosity, fz_colorspace *colorspace, const float *color, fz_color_params color_params)
 {
 	pdf_device *pdev = (pdf_device*)dev;
-	pdf_document *doc = pdev->doc;
 	gstate *gs;
 	pdf_obj *smask = NULL;
+	char egsname[32];
 	pdf_obj *egs = NULL;
-	pdf_obj *egs_ref;
+	pdf_obj *egss;
 	pdf_obj *form_ref;
 	pdf_obj *color_obj = NULL;
-	int i;
+	int i, n;
 
 	fz_var(smask);
 	fz_var(egs);
@@ -914,39 +952,30 @@ pdf_dev_begin_mask(fz_context *ctx, fz_device *dev, const fz_rect *bbox, int lum
 
 	fz_try(ctx)
 	{
-		int n = fz_colorspace_n(ctx, colorspace);
-		smask = pdf_new_dict(ctx, doc, 4);
-		pdf_dict_put_drop(ctx, smask, PDF_NAME_Type, PDF_NAME_Mask);
-		pdf_dict_put_drop(ctx, smask, PDF_NAME_S, (luminosity ? PDF_NAME_Luminosity : PDF_NAME_Alpha));
-		pdf_dict_put(ctx, smask, PDF_NAME_G, form_ref);
-		color_obj = pdf_new_array(ctx, doc, n);
+		fz_snprintf(egsname, sizeof(egsname), "SM%d", pdev->num_smasks++);
+		egss = pdf_dict_get(ctx, pdev->resources, PDF_NAME(ExtGState));
+		if (!egss)
+			egss = pdf_dict_put_dict(ctx, pdev->resources, PDF_NAME(ExtGState), 10);
+		egs = pdf_dict_puts_dict(ctx, egss, egsname, 1);
+
+		pdf_dict_put(ctx, egs, PDF_NAME(Type), PDF_NAME(ExtGState));
+		smask = pdf_dict_put_dict(ctx, egs, PDF_NAME(SMask), 4);
+
+		pdf_dict_put(ctx, smask, PDF_NAME(Type), PDF_NAME(Mask));
+		pdf_dict_put(ctx, smask, PDF_NAME(S), (luminosity ? PDF_NAME(Luminosity) : PDF_NAME(Alpha)));
+		pdf_dict_put(ctx, smask, PDF_NAME(G), form_ref);
+
+		n = fz_colorspace_n(ctx, colorspace);
+		color_obj = pdf_dict_put_array(ctx, smask, PDF_NAME(BC), n);
 		for (i = 0; i < n; i++)
-			pdf_array_push_drop(ctx, color_obj, pdf_new_real(ctx, doc, color[i]));
-		pdf_dict_put_drop(ctx, smask, PDF_NAME_BC, color_obj);
-		color_obj = NULL;
+			pdf_array_push_real(ctx, color_obj, color[i]);
 
-		egs = pdf_new_dict(ctx, doc, 5);
-		pdf_dict_put_drop(ctx, egs, PDF_NAME_Type, PDF_NAME_ExtGState);
-		pdf_dict_put_drop(ctx, egs, PDF_NAME_SMask, pdf_add_object(ctx, doc, smask));
-		egs_ref = pdf_add_object(ctx, doc, egs);
-
-		{
-			char text[32];
-			fz_snprintf(text, sizeof(text), "ExtGState/SM%d", pdev->num_smasks++);
-			pdf_dict_putp(ctx, pdev->resources, text, egs_ref);
-			pdf_drop_obj(ctx, egs_ref);
-		}
 		gs = CURRENT_GSTATE(pdev);
 		fz_append_printf(ctx, gs->buf, "/SM%d gs\n", pdev->num_smasks-1);
-	}
-	fz_always(ctx)
-	{
-		pdf_drop_obj(ctx, smask);
 	}
 	fz_catch(ctx)
 	{
 		pdf_drop_obj(ctx, form_ref);
-		pdf_drop_obj(ctx, color_obj);
 		fz_rethrow(ctx);
 	}
 
@@ -961,14 +990,13 @@ pdf_dev_end_mask(fz_context *ctx, fz_device *dev)
 	pdf_device *pdev = (pdf_device*)dev;
 	pdf_document *doc = pdev->doc;
 	gstate *gs = CURRENT_GSTATE(pdev);
-	fz_buffer *buf = fz_keep_buffer(ctx, gs->buf);
 	pdf_obj *form_ref = (pdf_obj *)gs->on_pop_arg;
 
 	/* Here we do part of the pop, but not all of it. */
 	pdf_dev_end_text(ctx, pdev);
-	fz_append_string(ctx, buf, "Q\n");
-	pdf_update_stream(ctx, doc, form_ref, buf, 0);
-	fz_drop_buffer(ctx, buf);
+	fz_append_string(ctx, gs->buf, "Q\n");
+	pdf_update_stream(ctx, doc, form_ref, gs->buf, 0);
+	fz_drop_buffer(ctx, gs->buf);
 	gs->buf = fz_keep_buffer(ctx, gs[-1].buf);
 	gs->on_pop_arg = NULL;
 	pdf_drop_obj(ctx, form_ref);
@@ -976,7 +1004,7 @@ pdf_dev_end_mask(fz_context *ctx, fz_device *dev)
 }
 
 static void
-pdf_dev_begin_group(fz_context *ctx, fz_device *dev, const fz_rect *bbox, int isolated, int knockout, int blendmode, float alpha)
+pdf_dev_begin_group(fz_context *ctx, fz_device *dev, fz_rect bbox, fz_colorspace *cs, int isolated, int knockout, int blendmode, float alpha)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 	pdf_document *doc = pdev->doc;
@@ -986,7 +1014,7 @@ pdf_dev_begin_group(fz_context *ctx, fz_device *dev, const fz_rect *bbox, int is
 
 	pdf_dev_end_text(ctx, pdev);
 
-	num = pdf_dev_new_form(ctx, &form_ref, pdev, bbox, isolated, knockout, alpha, NULL);
+	num = pdf_dev_new_form(ctx, &form_ref, pdev, bbox, isolated, knockout, alpha, cs);
 
 	/* Do we have an appropriate blending extgstate already? */
 	{
@@ -998,8 +1026,8 @@ pdf_dev_begin_group(fz_context *ctx, fz_device *dev, const fz_rect *bbox, int is
 		{
 			/* No, better make one */
 			obj = pdf_new_dict(ctx, doc, 2);
-			pdf_dict_put_drop(ctx, obj, PDF_NAME_Type, PDF_NAME_ExtGState);
-			pdf_dict_put_drop(ctx, obj, PDF_NAME_BM, pdf_new_name(ctx, doc, fz_blendmode_name(blendmode)));
+			pdf_dict_put(ctx, obj, PDF_NAME(Type), PDF_NAME(ExtGState));
+			pdf_dict_put_name(ctx, obj, PDF_NAME(BM), fz_blendmode_name(blendmode));
 			pdf_dict_putp_drop(ctx, pdev->resources, text, obj);
 		}
 	}
@@ -1030,7 +1058,7 @@ pdf_dev_end_group(fz_context *ctx, fz_device *dev)
 }
 
 static int
-pdf_dev_begin_tile(fz_context *ctx, fz_device *dev, const fz_rect *area, const fz_rect *view, float xstep, float ystep, const fz_matrix *ctm, int id)
+pdf_dev_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id)
 {
 	pdf_device *pdev = (pdf_device*)dev;
 
@@ -1062,15 +1090,20 @@ pdf_dev_drop_device(fz_context *ctx, fz_device *dev)
 	int i;
 
 	for (i = pdev->num_gstates-1; i >= 0; i--)
+	{
+		fz_drop_buffer(ctx, pdev->gstates[i].buf);
 		fz_drop_stroke_state(ctx, pdev->gstates[i].stroke_state);
+	}
 
 	for (i = pdev->num_cid_fonts-1; i >= 0; i--)
 		fz_drop_font(ctx, pdev->cid_fonts[i]);
 
 	for (i = pdev->num_groups - 1; i >= 0; i--)
+	{
 		pdf_drop_obj(ctx, pdev->groups[i].ref);
+		fz_drop_colorspace(ctx, pdev->groups[i].colorspace);
+	}
 
-	fz_drop_buffer(ctx, pdev->buffer);
 	pdf_drop_obj(ctx, pdev->resources);
 	fz_free(ctx, pdev->cid_fonts);
 	fz_free(ctx, pdev->image_indices);
@@ -1079,7 +1112,7 @@ pdf_dev_drop_device(fz_context *ctx, fz_device *dev)
 	fz_free(ctx, pdev->gstates);
 }
 
-fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, const fz_matrix *topctm, const fz_rect *mediabox, pdf_obj *resources, fz_buffer *buf)
+fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, fz_matrix topctm, fz_rect mediabox, pdf_obj *resources, fz_buffer *buf)
 {
 	pdf_device *dev = fz_new_derived_device(ctx, pdf_device);
 
@@ -1112,10 +1145,13 @@ fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, const fz_matri
 	dev->super.begin_tile = pdf_dev_begin_tile;
 	dev->super.end_tile = pdf_dev_end_tile;
 
+	fz_var(buf);
+
 	fz_try(ctx)
 	{
-		dev->buffer = fz_keep_buffer(ctx, buf);
-		if (!buf)
+		if (buf)
+			buf = fz_keep_buffer(ctx, buf);
+		else
 			buf = fz_new_buffer(ctx, 256);
 		dev->doc = doc;
 		dev->resources = pdf_keep_obj(ctx, resources);
@@ -1126,19 +1162,18 @@ fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, const fz_matri
 		dev->gstates[0].colorspace[1] = fz_device_gray(ctx);
 		dev->gstates[0].color[0][0] = 1;
 		dev->gstates[0].color[1][0] = 1;
-		dev->gstates[0].alpha[0] = 1.0;
-		dev->gstates[0].alpha[1] = 1.0;
+		dev->gstates[0].alpha[0] = 1.0f;
+		dev->gstates[0].alpha[1] = 1.0f;
 		dev->gstates[0].font = -1;
 		dev->num_gstates = 1;
 		dev->max_gstates = 1;
 
-		if (topctm != &fz_identity)
-			fz_append_printf(ctx, buf, "%M cm\n", topctm);
+		if (!fz_is_identity(topctm))
+			fz_append_printf(ctx, buf, "%M cm\n", &topctm);
 	}
 	fz_catch(ctx)
 	{
-		if (dev->gstates && dev->buffer == NULL)
-			fz_drop_buffer(ctx, dev->gstates[0].buf);
+		fz_drop_buffer(ctx, buf);
 		fz_free(ctx, dev);
 		fz_rethrow(ctx);
 	}
@@ -1146,11 +1181,10 @@ fz_device *pdf_new_pdf_device(fz_context *ctx, pdf_document *doc, const fz_matri
 	return (fz_device*)dev;
 }
 
-fz_device *pdf_page_write(fz_context *ctx, pdf_document *doc,
-	const fz_rect *mediabox, pdf_obj **presources, fz_buffer **pcontents)
+fz_device *pdf_page_write(fz_context *ctx, pdf_document *doc, fz_rect mediabox, pdf_obj **presources, fz_buffer **pcontents)
 {
-	fz_matrix pagectm = { 1, 0, 0, -1, -mediabox->x0, mediabox->y1 };
+	fz_matrix pagectm = { 1, 0, 0, -1, -mediabox.x0, mediabox.y1 };
 	*presources = pdf_new_dict(ctx, doc, 0);
 	*pcontents = fz_new_buffer(ctx, 0);
-	return pdf_new_pdf_device(ctx, doc, &pagectm, mediabox, *presources, *pcontents);
+	return pdf_new_pdf_device(ctx, doc, pagectm, mediabox, *presources, *pcontents);
 }

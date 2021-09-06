@@ -235,7 +235,7 @@ test_object (void)
 
     {
       unsigned int j;
-      data_t data[2] = {{MAGIC0, FALSE}, {MAGIC1, FALSE}};
+      data_t data[1000] = {{MAGIC0, FALSE}, {MAGIC1, FALSE}};
       deadlock_test_t deadlock_test;
 
       g_test_message ("Testing object %s", o->name);
@@ -345,7 +345,7 @@ test_object (void)
       if (!obj)
 	continue;
       if (obj == o->get_empty ())
-        continue; /* Tested already */
+	continue; /* Tested already */
 
       g_assert (obj == o->reference (obj));
       o->destroy (obj);

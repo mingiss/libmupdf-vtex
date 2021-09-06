@@ -1,5 +1,9 @@
 #include "mupdf/fitz.h"
 
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+
 /* Lifted from ghostscript gdevjlm.h */
 /*
  * The notion that there is such a thing as a "PCL printer" is a fiction: no
@@ -207,6 +211,25 @@ static void copy_opts(fz_pcl_options *dst, const fz_pcl_options *src)
 		*dst = *src;
 }
 
+const char *fz_pcl_write_options_usage =
+	"PCL output options:\n"
+	"\tcolorspace=mono: render 1-bit black and white page\n"
+	"\tcolorspace=rgb: render full color page\n"
+	"\tpreset=generic|ljet4|dj500|fs600|lj|lj2|lj3|lj3d|lj4|lj4pl|lj4d|lp2563b|oce9050\n"
+	"\tspacing=0: No vertical spacing capability\n"
+	"\tspacing=1: PCL 3 spacing (<ESC>*p+<n>Y)\n"
+	"\tspacing=2: PCL 4 spacing (<ESC>*b<n>Y)\n"
+	"\tspacing=3: PCL 5 spacing (<ESC>*b<n>Y and clear seed row)\n"
+	"\tmode2: Enable mode 2 graphics compression\n"
+	"\tmode3: Enable mode 3 graphics compression\n"
+	"\teog_reset: End of graphics (<ESC>*rB) resets all parameters\n"
+	"\thas_duplex: Duplex supported (<ESC>&l<duplex>S)\n"
+	"\thas_papersize: Papersize setting supported (<ESC>&l<sizecode>A)\n"
+	"\thas_copies: Number of copies supported (<ESC>&l<copies>X)\n"
+	"\tis_ljet4pjl: Disable/Enable HP 4PJL model-specific output\n"
+	"\tis_oce9050: Disable/Enable Oce 9050 model-specific output\n"
+	"\n";
+
 void fz_pcl_preset(fz_context *ctx, fz_pcl_options *opts, const char *preset)
 {
 	if (preset == NULL || *preset == 0 || !strcmp(preset, "generic"))
@@ -239,105 +262,103 @@ void fz_pcl_preset(fz_context *ctx, fz_pcl_options *opts, const char *preset)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "Unknown preset '%s'", preset);
 }
 
-void fz_pcl_option(fz_context *ctx, fz_pcl_options *opts, const char *option, int val)
+fz_pcl_options *
+fz_parse_pcl_options(fz_context *ctx, fz_pcl_options *opts, const char *args)
 {
-	if (opts == NULL)
-		return;
+	const char *val;
 
-	if (!strcmp(option, "spacing"))
+	memset(opts, 0, sizeof *opts);
+
+	if (fz_has_option(ctx, args, "preset", &val))
+		fz_pcl_preset(ctx, opts, val);
+	else
+		fz_pcl_preset(ctx, opts, "generic");
+
+	if (fz_has_option(ctx, args, "spacing", &val))
 	{
-		switch (val)
+		switch (atoi(val))
 		{
-		case 0:
-			opts->features &= ~PCL_ANY_SPACING;
-			break;
-		case 1:
-			opts->features = (opts->features & ~PCL_ANY_SPACING) | PCL3_SPACING;
-			break;
-		case 2:
-			opts->features = (opts->features & ~PCL_ANY_SPACING) | PCL4_SPACING;
-			break;
-		case 3:
-			opts->features = (opts->features & ~PCL_ANY_SPACING) | PCL5_SPACING;
-			break;
-		default:
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Unsupported PCL spacing %d (0-3 only)", val);
+		case 0: opts->features &= ~PCL_ANY_SPACING; break;
+		case 1: opts->features = (opts->features & ~PCL_ANY_SPACING) | PCL3_SPACING; break;
+		case 2: opts->features = (opts->features & ~PCL_ANY_SPACING) | PCL4_SPACING; break;
+		case 3: opts->features = (opts->features & ~PCL_ANY_SPACING) | PCL5_SPACING; break;
+		default: fz_throw(ctx, FZ_ERROR_GENERIC, "Unsupported PCL spacing %d (0-3 only)", atoi(val));
 		}
 	}
-	else if (!strcmp(option, "mode2"))
+	if (fz_has_option(ctx, args, "mode2", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~PCL_MODE_2_COMPRESSION;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= PCL_MODE_2_COMPRESSION;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for mode2 value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for mode2 value");
 	}
-	else if (!strcmp(option, "mode3"))
+	if (fz_has_option(ctx, args, "mode3", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~PCL_MODE_3_COMPRESSION;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= PCL_MODE_3_COMPRESSION;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for mode3 value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for mode3 value");
 	}
-	else if (!strcmp(option, "eog_reset"))
+	if (fz_has_option(ctx, args, "eog_reset", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~PCL_END_GRAPHICS_DOES_RESET;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= PCL_END_GRAPHICS_DOES_RESET;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for eog_reset value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for eog_reset value");
 	}
-	else if (!strcmp(option, "has_duplex"))
+	if (fz_has_option(ctx, args, "has_duplex", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~PCL_HAS_DUPLEX;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= PCL_HAS_DUPLEX;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for has_duplex value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for has_duplex value");
 	}
-	else if (!strcmp(option, "has_papersize"))
+	if (fz_has_option(ctx, args, "has_papersize", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~PCL_CAN_SET_PAPER_SIZE;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= PCL_CAN_SET_PAPER_SIZE;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for has_papersize value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for has_papersize value");
 	}
-	else if (!strcmp(option, "has_copies"))
+	if (fz_has_option(ctx, args, "has_copies", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~PCL_CAN_PRINT_COPIES;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= PCL_CAN_PRINT_COPIES;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for has_papersize value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for has_papersize value");
 	}
-	else if (!strcmp(option, "is_ljet4pjl"))
+	if (fz_has_option(ctx, args, "is_ljet4pjl", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~HACK__IS_A_LJET4PJL;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= HACK__IS_A_LJET4PJL;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for is_ljet4pjl value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for is_ljet4pjl value");
 	}
-	else if (!strcmp(option, "is_oce9050"))
+	if (fz_has_option(ctx, args, "is_oce9050", &val))
 	{
-		if (val == 0)
+		if (fz_option_eq(val, "no"))
 			opts->features &= ~HACK__IS_A_OCE9050;
-		else if (val == 1)
+		else if (fz_option_eq(val, "yes"))
 			opts->features |= HACK__IS_A_OCE9050;
 		else
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 0 or 1 for is_oce9050 value");
+			fz_throw(ctx, FZ_ERROR_GENERIC, "Expected 'yes' or 'no' for is_oce9050 value");
 	}
-	else
-		fz_throw(ctx, FZ_ERROR_GENERIC, "Unknown pcl option '%s'", option);
+
+	return opts;
 }
 
 static void
@@ -345,7 +366,7 @@ make_init(fz_pcl_options *pcl, char *buf, unsigned long len, const char *str, in
 {
 	int paper_source = -1;
 
-	snprintf(buf, len, str, res);
+	fz_snprintf(buf, len, str, res);
 
 	if (pcl->manual_feed_set && pcl->manual_feed)
 		paper_source = 2;
@@ -354,7 +375,7 @@ make_init(fz_pcl_options *pcl, char *buf, unsigned long len, const char *str, in
 	if (paper_source >= 0)
 	{
 		char buf2[40];
-		snprintf(buf2, sizeof(buf2), "\033&l%dH", paper_source);
+		fz_snprintf(buf2, sizeof(buf2), "\033&l%dH", paper_source);
 		strncat(buf, buf2, len);
 	}
 }
@@ -373,6 +394,8 @@ pcl_header(fz_context *ctx, fz_output *out, fz_pcl_options *pcl, int num_copies,
 		if (pcl->features & HACK__IS_A_LJET4PJL)
 			fz_write_string(ctx, out, "\033%-12345X@PJL\r\n@PJL ENTER LANGUAGE = PCL\r\n");
 		fz_write_string(ctx, out, "\033E"); /* reset printer */
+		/* Reset the margins */
+		fz_write_string(ctx, out, "\033&10e-180u36Z");
 		/* If the printer supports it, set orientation */
 		if (pcl->features & PCL_HAS_ORIENTATION)
 		{
@@ -466,6 +489,12 @@ pcl_header(fz_context *ctx, fz_output *out, fz_pcl_options *pcl, int num_copies,
 
 	/* Set resolution. */
 	fz_write_printf(ctx, out, "\033*t%dR", xres);
+
+	/* Raster units */
+	/* 96,100,120,144,150,160,180,200,225,240,288,300,360,400,450,480,600,720,800,900,1200,1440,1800,2400,3600,7200 */
+	/* FIXME: xres vs yres */
+	fz_write_printf(ctx, out, "\033&u%dD", xres);
+
 	pcl->page_count++;
 }
 
@@ -538,7 +567,7 @@ static void guess_paper_size(fz_pcl_options *pcl, int w, int h, int xres, int yr
 	h = h * 300 / xres;
 
 	/* Look for an exact match */
-	for (size = 0; size < num_elems(papersizes); size++)
+	for (size = 0; size < (int)num_elems(papersizes); size++)
 	{
 		if (papersizes[size].code > eCustomPaperSize && (pcl->features & PCL_HAS_RICOH_PAPER_SIZES) == 0)
 			continue;
@@ -565,7 +594,7 @@ static void guess_paper_size(fz_pcl_options *pcl, int w, int h, int xres, int yr
 			/* Send the next larger one (minimise waste) */
 			int i;
 			int best_waste = INT_MAX;
-			for (i = 0; i < num_elems(papersizes); i++)
+			for (i = 0; i < (int)num_elems(papersizes); i++)
 			{
 				int waste;
 				if (papersizes[i].code > eCustomPaperSize && (pcl->features & PCL_HAS_RICOH_PAPER_SIZES) == 0)
@@ -591,7 +620,7 @@ static void guess_paper_size(fz_pcl_options *pcl, int w, int h, int xres, int yr
 
 	/* Now, size = The best size we have (or num_elems(papersizes)) if it's too big */
 
-	if (size < num_elems(papersizes))
+	if (size < (int)num_elems(papersizes))
 		pcl->paper_size = papersizes[size].code;
 	else
 		pcl->paper_size = eCustomPaperSize; /* Custom */
@@ -599,8 +628,7 @@ static void guess_paper_size(fz_pcl_options *pcl, int w, int h, int xres, int yr
 	pcl->orientation = rotated;
 }
 
-/* Copy a line, removing the alpha, returning true if the line
- * was blank. */
+/* Copy a line, returning true if the line was blank. */
 static int
 line_is_blank(unsigned char *dst, const unsigned char *sp, int w)
 {
@@ -611,7 +639,6 @@ line_is_blank(unsigned char *dst, const unsigned char *sp, int w)
 		zero |= (*dst++ = *sp++);
 		zero |= (*dst++ = *sp++);
 		zero |= (*dst++ = *sp++);
-		sp++;
 	}
 
 	return zero == 0;
@@ -688,7 +715,7 @@ fz_write_pixmap_as_pcl(fz_context *ctx, fz_output *out, const fz_pixmap *pixmap,
 	writer = fz_new_color_pcl_band_writer(ctx, out, pcl);
 	fz_try(ctx)
 	{
-		fz_write_header(ctx, writer, pixmap->w, pixmap->h, pixmap->n, pixmap->alpha, pixmap->xres, pixmap->yres, 0);
+		fz_write_header(ctx, writer, pixmap->w, pixmap->h, pixmap->n, pixmap->alpha, pixmap->xres, pixmap->yres, 0, pixmap->colorspace, pixmap->seps);
 		fz_write_band(ctx, writer, pixmap->stride, pixmap->h, pixmap->samples);
 	}
 	fz_always(ctx)
@@ -702,33 +729,31 @@ typedef struct color_pcl_band_writer_s
 	fz_band_writer super;
 	fz_pcl_options options;
 	unsigned char *linebuf;
-	unsigned char *compbuf;
-	unsigned char *prev;
-	unsigned char *curr;
-	int fill;
-	int seed_valid;
+	unsigned char compbuf[32768];
+	unsigned char compbuf2[32768];
 } color_pcl_band_writer;
 
 static void
-color_pcl_write_header(fz_context *ctx, fz_band_writer *writer_)
+color_pcl_write_header(fz_context *ctx, fz_band_writer *writer_, fz_colorspace *cs)
 {
 	color_pcl_band_writer *writer = (color_pcl_band_writer *)writer_;
 	fz_output *out = writer->super.out;
 	int w = writer->super.w;
 	int h = writer->super.h;
 	int n = writer->super.n;
+	int s = writer->super.s;
+	int a = writer->super.alpha;
 	int xres = writer->super.xres;
 	int yres = writer->super.yres;
 
-	if (n != 4)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "pixmap must be rgb to write as pcl");
+	if (a != 0)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "color PCL cannot write alpha channel");
+	if (s != 0)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "color PCL cannot write spot colors");
+	if (n != 3)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "color PCL must be RGB");
 
-	writer->linebuf = fz_malloc(ctx, w * 3 * 2);
-	writer->compbuf = fz_malloc(ctx, 32767);
-	writer->prev = writer->linebuf;
-	writer->curr = writer->linebuf + w * 3;
-	writer->fill = 0;
-	writer->seed_valid = 0;
+	writer->linebuf = Memento_label(fz_malloc(ctx, w * 3 * 2), "color_pcl_linebuf");
 
 	guess_paper_size(&writer->options, w, h, xres, yres);
 
@@ -753,73 +778,50 @@ color_pcl_write_header(fz_context *ctx, fz_band_writer *writer_)
 	/* Supposed to be strictly 75, 100, 150, 200, 300, 600 */
 	/* FIXME: xres vs yres */
 	fz_write_printf(ctx, out, "\033*t%dR", xres);
+}
 
-	/* Raster height */
-	fz_write_printf(ctx, out, "\033*r%dT", h);
-
-	/* Raster width */
-	fz_write_printf(ctx, out, "\033*r%dS", w);
-
-	/* start raster graphics */
-	/* 0 = start at default left graphics margin */
-	fz_write_string(ctx, out, "\033*r0A");
-
-	/* Now output the actual bitmap */
-	/* Adaptive Compression */
-	fz_write_string(ctx, out, "\033*b5M");
+static void flush_if_not_room(fz_context *ctx, fz_output *out, const unsigned char *comp, int *fill, int len)
+{
+	if (len + *fill >= 32767)
+	{
+		/* Can't fit any data, so flush */
+		fz_write_printf(ctx, out, "\033*b%dW", *fill);
+		fz_write_data(ctx, out, comp, *fill);
+		*fill = 0;
+	}
 }
 
 static void
-color_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int band_start, int band_height, const unsigned char *sp)
+color_pcl_compress_column(fz_context *ctx, color_pcl_band_writer *writer, const unsigned char *sp, int w, int h, int stride)
 {
-	color_pcl_band_writer *writer = (color_pcl_band_writer *)writer_;
 	fz_output *out = writer->super.out;
-	int w = writer->super.w;
-	int h = writer->super.h;
-	int y, ss, ds, seed_valid, fill;
-	unsigned char *prev;
-	unsigned char *curr;
-	unsigned char *comp;
+	int ss = w * 3;
+	int seed_valid = 0;
+	int fill = 0;
+	int y = 0;
+	unsigned char *prev = writer->linebuf + w * 3;
+	unsigned char *curr = writer->linebuf;
+	unsigned char *comp = writer->compbuf;
+	unsigned char *comp2 = writer->compbuf2;
 
-	if (!out)
-		return;
-
-	ds = w * 3;
-	ss = w * 4;
-
-	prev = writer->prev;
-	curr = writer->curr;
-	fill = writer->fill;
-	comp = writer->compbuf;
-	seed_valid = writer->seed_valid;
-
-	if (band_start+band_height >= h)
-		band_height = h - band_start;
-
-	y = 0;
-	while (y < band_height)
+	while (y < h)
 	{
 		/* Skip over multiple blank lines */
 		int blanks;
 		do
 		{
 			blanks = 0;
-			while (blanks < 32767 && y < band_height)
+			while (blanks < 32767 && y < h)
 			{
 				if (!line_is_blank(curr, sp, w))
 					break;
 				blanks++;
+				y++;
 			}
 
 			if (blanks)
 			{
-				if (fill + 3 >= 32767)
-				{
-					/* Can't fit into the block, so flush */
-					fz_write_printf(ctx, out, "\033*b%dW", fill);
-					fz_write_data(ctx, out, comp, fill);
-					fill = 0;
-				}
+				flush_if_not_room(ctx, out, comp, &fill, 3);
 				comp[fill++] = 4; /* Empty row */
 				comp[fill++] = blanks>>8;
 				comp[fill++] = blanks & 0xFF;
@@ -828,11 +830,11 @@ color_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int b
 		}
 		while (blanks == 32767);
 
-		if (y == band_height)
+		if (y == h)
 			break;
 
 		/* So, at least 1 more line to copy, and it's in curr */
-		if (seed_valid && fill + 5 <= 32767 && memcmp(curr, prev, ds) == 0)
+		if (seed_valid && memcmp(curr, prev, ss) == 0)
 		{
 			int count = 1;
 			sp += stride;
@@ -845,6 +847,7 @@ color_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int b
 				sp += stride;
 				y++;
 			}
+			flush_if_not_room(ctx, out, comp, &fill, 3);
 			comp[fill++] = 5; /* Duplicate row */
 			comp[fill++] = count>>8;
 			comp[fill++] = count & 0xFF;
@@ -854,43 +857,34 @@ color_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int b
 			unsigned char *tmp;
 			int len = 0;
 
+			/* Compress the line into our fixed buffer. */
 			if (seed_valid)
-				len = delta_compression(curr, prev, &comp[fill+3], ds, fz_mini(ds, 32767 - fill - len - 3));
+				len = delta_compression(curr, prev, comp2, ss, fz_mini(ss-1, 32767-3));
 
-			if (fill + len + 3 > 32767)
+			if (len > 0)
 			{
-				/* Can't fit this into the block, so flush and send uncompressed */
-				fz_write_printf(ctx, out, "\033*b%dW", fill);
-				fz_write_data(ctx, out, comp, fill);
-				fill = 0;
-				len = 0;
-			}
-
-			if (len)
-			{
-				/* Delta compression - Data already in the buffer. */
+				/* Delta compression */
+				flush_if_not_room(ctx, out, comp, &fill, len+3);
 				comp[fill++] = 3; /* Delta compression */
 				comp[fill++] = len>>8;
 				comp[fill++] = len & 0xFF;
+				memcpy(&comp[fill], comp2, len);
 				fill += len;
 			}
 			else
 			{
-				if (fill + ds + 3 > 32767)
-				{
-					/* Can't fit a line uncompressed, so flush */
-					fz_write_printf(ctx, out, "\033*b%dW", fill);
-					fz_write_data(ctx, out, comp, fill);
-					fill = 0;
-				}
+				flush_if_not_room(ctx, out, comp, &fill, 3 + ss);
+
+				/* PCL requires that all rows MUST fit in at most 1 block, so
+				 * we are carefully sending columns that are only so wide. */
 
 				/* Unencoded */
-				/* Transfer Raster Data: ds+3 bytes, 0 = Unencoded, count high, count low */
+				/* Transfer Raster Data: ss+3 bytes, 0 = Unencoded, count high, count low */
 				comp[fill++] = 0;
-				comp[fill++] = ds>>8;
-				comp[fill++] = ds & 0xFF;
-				memcpy(&comp[fill], curr, ds);
-				fill += ds;
+				comp[fill++] = ss>>8;
+				comp[fill++] = ss & 0xFF;
+				memcpy(&comp[fill], curr, ss);
+				fill += ss;
 				seed_valid = 1;
 			}
 
@@ -900,24 +894,10 @@ color_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int b
 			y++;
 		}
 	}
-
-	writer->prev = prev;
-	writer->curr = curr;
-	writer->fill = fill;
-	writer->compbuf = comp;
-	writer->seed_valid = seed_valid;
-}
-
-static void
-color_pcl_write_trailer(fz_context *ctx, fz_band_writer *writer_)
-{
-	color_pcl_band_writer *writer = (color_pcl_band_writer *)writer_;
-	fz_output *out = writer->super.out;
-
-	if (writer->fill)
-	{
-		fz_write_printf(ctx, out, "\033*b%dW", writer->fill);
-		fz_write_data(ctx, out, writer->compbuf, writer->fill);
+	/* And flush */
+	if (fill) {
+		fz_write_printf(ctx, out, "\033*b%dW", fill);
+		fz_write_data(ctx, out, comp, fill);
 	}
 
 	/* End Raster Graphics */
@@ -925,11 +905,72 @@ color_pcl_write_trailer(fz_context *ctx, fz_band_writer *writer_)
 }
 
 static void
+color_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int band_start, int band_height, const unsigned char *sp)
+{
+	color_pcl_band_writer *writer = (color_pcl_band_writer *)writer_;
+	fz_output *out = writer->super.out;
+	int w = writer->super.w;
+	int h = writer->super.h;
+	int xres = writer->super.xres;
+	int cw;
+	int x;
+
+	if (!out)
+		return;
+
+	if (band_start+band_height >= h)
+		band_height = h - band_start;
+
+	/* We have to specify image output size in decipoints (720dpi).
+	 * Most usual PCL resolutions are a multiple of 75.
+	 * Pick our maximum column size to be 10800 = 15*720 = 144*75
+	 * to give us good results. 10800 * 3 = 32400 < 32760 */
+	cw = 10800; /* Limited by how much rowdata we can send at once */
+	if (cw > w)
+		cw = w;
+
+	for (x = 0; x*cw < w; x++)
+	{
+		int col_w = w - cw*x;
+		if (col_w > cw)
+			col_w = cw;
+
+		/* Top left corner */
+		fz_write_printf(ctx, out, "\033*p%dx%dY", x*cw, band_start);
+
+		/* Raster height */
+		fz_write_printf(ctx, out, "\033*r%dT", band_height);
+
+		/* Raster width */
+		fz_write_printf(ctx, out, "\033*r%dS", col_w);
+
+		/* Destination height */
+		fz_write_printf(ctx, out, "\033*t%dV", band_height*720/xres);
+
+		/* Destination width */
+		fz_write_printf(ctx, out, "\033*t%dH", col_w*720/xres);
+
+		/* start raster graphics */
+		/* 1 = start at cursor position */
+		fz_write_string(ctx, out, "\033*r3A");
+
+		/* Now output the actual bitmap */
+		/* Adaptive Compression */
+		fz_write_string(ctx, out, "\033*b5M");
+
+		color_pcl_compress_column(ctx, writer, sp + x * cw * 3, col_w, band_height, stride);
+	}
+}
+
+static void
+color_pcl_write_trailer(fz_context *ctx, fz_band_writer *writer_)
+{
+}
+
+static void
 color_pcl_drop_band_writer(fz_context *ctx, fz_band_writer *writer_)
 {
 	color_pcl_band_writer *writer = (color_pcl_band_writer *)writer_;
-
-	fz_free(ctx, writer->compbuf);
 	fz_free(ctx, writer->linebuf);
 }
 
@@ -960,7 +1001,7 @@ fz_band_writer *fz_new_color_pcl_band_writer(fz_context *ctx, fz_output *out, co
  * In the worst case, the result is N+(N/127)+1 bytes long,
  * where N is the original byte count (end_row - row).
  */
-int
+static int
 mode2compress(unsigned char *out, const unsigned char *in, int in_len)
 {
 	int x;
@@ -1016,7 +1057,7 @@ mode2compress(unsigned char *out, const unsigned char *in, int in_len)
  * Returns the number of bytes stored.	In the worst case,
  * the number of bytes is bytecount+(bytecount/8)+1.
  */
-int
+static int
 mode3compress(unsigned char *out, const unsigned char *in, unsigned char *prev, int in_len)
 {
 	unsigned char *compressed = out;
@@ -1064,9 +1105,6 @@ mode3compress(unsigned char *out, const unsigned char *in, unsigned char *prev, 
 	return out - compressed;
 }
 
-void wind(void)
-{}
-
 void
 fz_write_bitmap_as_pcl(fz_context *ctx, fz_output *out, const fz_bitmap *bitmap, const fz_pcl_options *pcl)
 {
@@ -1078,7 +1116,7 @@ fz_write_bitmap_as_pcl(fz_context *ctx, fz_output *out, const fz_bitmap *bitmap,
 	writer = fz_new_mono_pcl_band_writer(ctx, out, pcl);
 	fz_try(ctx)
 	{
-		fz_write_header(ctx, writer, bitmap->w, bitmap->h, 1, 0, bitmap->xres, bitmap->yres, 0);
+		fz_write_header(ctx, writer, bitmap->w, bitmap->h, 1, 0, bitmap->xres, bitmap->yres, 0, NULL, NULL);
 		fz_write_band(ctx, writer, bitmap->stride, bitmap->h, bitmap->samples);
 	}
 	fz_always(ctx)
@@ -1099,7 +1137,7 @@ typedef struct mono_pcl_band_writer_s
 } mono_pcl_band_writer;
 
 static void
-mono_pcl_write_header(fz_context *ctx, fz_band_writer *writer_)
+mono_pcl_write_header(fz_context *ctx, fz_band_writer *writer_, fz_colorspace *cs)
 {
 	mono_pcl_band_writer *writer = (mono_pcl_band_writer *)writer_;
 	fz_output *out = writer->super.out;
@@ -1110,6 +1148,13 @@ mono_pcl_write_header(fz_context *ctx, fz_band_writer *writer_)
 	int line_size;
 	int max_mode_2_size;
 	int max_mode_3_size;
+
+	if (writer->super.alpha != 0)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "mono PCL cannot write alpha channel");
+	if (writer->super.s != 0)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "mono PCL cannot write spot colors");
+	if (writer->super.n != 1)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "mono PCL must be grayscale");
 
 	line_size = (w + 7)/8;
 	max_mode_2_size = line_size + (line_size/127) + 1;
@@ -1138,7 +1183,6 @@ mono_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int ss, int band_s
 	mono_pcl_band_writer *writer = (mono_pcl_band_writer *)writer_;
 	fz_output *out = writer->super.out;
 	int w = writer->super.w;
-	int h = writer->super.h;
 	int yres = writer->super.yres;
 	const unsigned char *out_data;
 	int y, rmask, line_size;
@@ -1162,7 +1206,7 @@ mono_pcl_write_band(fz_context *ctx, fz_band_writer *writer_, int ss, int band_s
 	pcl = &writer->options;
 
 	/* Transfer raster graphics. */
-	for (y = 0; y < h; y++, data += ss)
+	for (y = 0; y < band_height; y++, data += ss)
 	{
 		const unsigned char *end_data = data + line_size;
 
@@ -1350,7 +1394,10 @@ fz_save_pixmap_as_pcl(fz_context *ctx, fz_pixmap *pixmap, char *filename, int ap
 {
 	fz_output *out = fz_new_output_with_path(ctx, filename, append);
 	fz_try(ctx)
+	{
 		fz_write_pixmap_as_pcl(ctx, out, pixmap, pcl);
+		fz_close_output(ctx, out);
+	}
 	fz_always(ctx)
 		fz_drop_output(ctx, out);
 	fz_catch(ctx)
@@ -1362,9 +1409,117 @@ fz_save_bitmap_as_pcl(fz_context *ctx, fz_bitmap *bitmap, char *filename, int ap
 {
 	fz_output *out = fz_new_output_with_path(ctx, filename, append);
 	fz_try(ctx)
+	{
 		fz_write_bitmap_as_pcl(ctx, out, bitmap, pcl);
+		fz_close_output(ctx, out);
+	}
 	fz_always(ctx)
 		fz_drop_output(ctx, out);
 	fz_catch(ctx)
 		fz_rethrow(ctx);
+}
+
+/* High-level document writer interface */
+
+typedef struct
+{
+	fz_document_writer super;
+	fz_draw_options draw;
+	fz_pcl_options pcl;
+	fz_pixmap *pixmap;
+	int mono;
+	fz_output *out;
+} fz_pcl_writer;
+
+static fz_device *
+pcl_begin_page(fz_context *ctx, fz_document_writer *wri_, fz_rect mediabox)
+{
+	fz_pcl_writer *wri = (fz_pcl_writer*)wri_;
+	return fz_new_draw_device_with_options(ctx, &wri->draw, mediabox, &wri->pixmap);
+}
+
+static void
+pcl_end_page(fz_context *ctx, fz_document_writer *wri_, fz_device *dev)
+{
+	fz_pcl_writer *wri = (fz_pcl_writer*)wri_;
+	fz_bitmap *bitmap = NULL;
+
+	fz_var(bitmap);
+
+	fz_try(ctx)
+	{
+		fz_close_device(ctx, dev);
+		if (wri->mono)
+		{
+			bitmap = fz_new_bitmap_from_pixmap(ctx, wri->pixmap, NULL);
+			fz_write_bitmap_as_pcl(ctx, wri->out, bitmap, &wri->pcl);
+		}
+		else
+		{
+			fz_write_pixmap_as_pcl(ctx, wri->out, wri->pixmap, &wri->pcl);
+		}
+	}
+	fz_always(ctx)
+	{
+		fz_drop_device(ctx, dev);
+		fz_drop_bitmap(ctx, bitmap);
+		fz_drop_pixmap(ctx, wri->pixmap);
+		wri->pixmap = NULL;
+	}
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+}
+
+static void
+pcl_close_writer(fz_context *ctx, fz_document_writer *wri_)
+{
+	fz_pcl_writer *wri = (fz_pcl_writer*)wri_;
+	fz_close_output(ctx, wri->out);
+}
+
+static void
+pcl_drop_writer(fz_context *ctx, fz_document_writer *wri_)
+{
+	fz_pcl_writer *wri = (fz_pcl_writer*)wri_;
+	fz_drop_pixmap(ctx, wri->pixmap);
+	fz_drop_output(ctx, wri->out);
+}
+
+fz_document_writer *
+fz_new_pcl_writer_with_output(fz_context *ctx, fz_output *out, const char *options)
+{
+	fz_pcl_writer *wri = fz_new_derived_document_writer(ctx, fz_pcl_writer, pcl_begin_page, pcl_end_page, pcl_close_writer, pcl_drop_writer);
+	const char *val;
+
+	fz_try(ctx)
+	{
+		fz_parse_draw_options(ctx, &wri->draw, options);
+		fz_parse_pcl_options(ctx, &wri->pcl, options);
+		if (fz_has_option(ctx, options, "colorspace", &val))
+			if (fz_option_eq(val, "mono"))
+				wri->mono = 1;
+		wri->out = out;
+	}
+	fz_catch(ctx)
+	{
+		fz_free(ctx, wri);
+		fz_rethrow(ctx);
+	}
+
+	return (fz_document_writer*)wri;
+}
+
+fz_document_writer *
+fz_new_pcl_writer(fz_context *ctx, const char *path, const char *options)
+{
+	fz_output *out = fz_new_output_with_path(ctx, path ? path : "out.pcl", 0);
+	fz_document_writer *wri = NULL;
+	fz_try(ctx)
+		wri = fz_new_pcl_writer_with_output(ctx, out, options);
+	fz_catch(ctx)
+	{
+		fz_drop_output(ctx, out);
+		fz_rethrow(ctx);
+	}
+	return wri;
 }

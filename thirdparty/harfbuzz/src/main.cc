@@ -24,10 +24,10 @@
  * Red Hat Author(s): Behdad Esfahbod
  */
 
-#include "hb-mutex-private.hh"
-#include "hb-open-file-private.hh"
+#include "hb-static.cc"
+#include "hb-open-file.hh"
 #include "hb-ot-layout-gdef-table.hh"
-#include "hb-ot-layout-gsubgpos-private.hh"
+#include "hb-ot-layout-gsubgpos.hh"
 
 #ifdef HAVE_GLIB
 #include <glib.h>
@@ -38,36 +38,36 @@
 
 using namespace OT;
 
+#ifdef HB_NO_OPEN
+#define hb_blob_create_from_file(x)  hb_blob_get_empty ()
+#endif
 
 int
 main (int argc, char **argv)
 {
-  if (argc != 2) {
+  if (argc != 2)
+  {
     fprintf (stderr, "usage: %s font-file.ttf\n", argv[0]);
     exit (1);
   }
 
-  const char *font_data = NULL;
-  int len = 0;
-
-#ifdef HAVE_GLIB
-  GMappedFile *mf = g_mapped_file_new (argv[1], false, NULL);
-  font_data = g_mapped_file_get_contents (mf);
-  len = g_mapped_file_get_length (mf);
-#else
-  FILE *f = fopen (argv[1], "rb");
-  fseek (f, 0, SEEK_END);
-  len = ftell (f);
-  fseek (f, 0, SEEK_SET);
-  font_data = (const char *) malloc (len);
-  len = fread ((char *) font_data, 1, len, f);
-#endif
-
+  hb_blob_t *blob = hb_blob_create_from_file (argv[1]);
+  unsigned int len;
+  const char *font_data = hb_blob_get_data (blob, &len);
   printf ("Opened font file %s: %d bytes long\n", argv[1], len);
 
-  const OpenTypeFontFile &ot = *CastP<OpenTypeFontFile> (font_data);
+  hb_blob_t *font_blob = hb_sanitize_context_t().sanitize_blob<OpenTypeFontFile> (blob);
+  const OpenTypeFontFile* sanitized = font_blob->as<OpenTypeFontFile> ();
+  if (!font_blob->data)
+  {
+    printf ("Sanitization of the file wasn't successful. Exit");
+    return 1;
+  }
+  const OpenTypeFontFile& ot = *sanitized;
 
-  switch (ot.get_tag ()) {
+
+  switch (ot.get_tag ())
+  {
   case OpenTypeFontFile::TrueTypeTag:
     printf ("OpenType font with TrueType outlines\n");
     break;
@@ -83,6 +83,9 @@ main (int argc, char **argv)
   case OpenTypeFontFile::Typ1Tag:
     printf ("Obsolete Apple Type1 font in SFNT container\n");
     break;
+  case OpenTypeFontFile::DFontTag:
+    printf ("DFont Mac Resource Fork\n");
+    break;
   default:
     printf ("Unknown font format\n");
     break;
@@ -90,33 +93,37 @@ main (int argc, char **argv)
 
   int num_fonts = ot.get_face_count ();
   printf ("%d font(s) found in file\n", num_fonts);
-  for (int n_font = 0; n_font < num_fonts; n_font++) {
+  for (int n_font = 0; n_font < num_fonts; n_font++)
+  {
     const OpenTypeFontFace &font = ot.get_face (n_font);
     printf ("Font %d of %d:\n", n_font, num_fonts);
 
     int num_tables = font.get_table_count ();
     printf ("  %d table(s) found in font\n", num_tables);
-    for (int n_table = 0; n_table < num_tables; n_table++) {
+    for (int n_table = 0; n_table < num_tables; n_table++)
+    {
       const OpenTypeTable &table = font.get_table (n_table);
       printf ("  Table %2d of %2d: %.4s (0x%08x+0x%08x)\n", n_table, num_tables,
-	      (const char *)table.tag,
+	      (const char *) table.tag,
 	      (unsigned int) table.offset,
 	      (unsigned int) table.length);
 
-      switch (table.tag) {
+      switch (table.tag)
+      {
 
-      case GSUBGPOS::GSUBTag:
-      case GSUBGPOS::GPOSTag:
+      case HB_OT_TAG_GSUB:
+      case HB_OT_TAG_GPOS:
 	{
 
 	const GSUBGPOS &g = *CastP<GSUBGPOS> (font_data + table.offset);
 
 	int num_scripts = g.get_script_count ();
 	printf ("    %d script(s) found in table\n", num_scripts);
-	for (int n_script = 0; n_script < num_scripts; n_script++) {
+	for (int n_script = 0; n_script < num_scripts; n_script++)
+	{
 	  const Script &script = g.get_script (n_script);
 	  printf ("    Script %2d of %2d: %.4s\n", n_script, num_scripts,
-	          (const char *)g.get_script_tag(n_script));
+		  (const char *)g.get_script_tag(n_script));
 
 	  if (!script.has_default_lang_sys())
 	    printf ("      No default language system\n");
@@ -139,34 +146,37 @@ main (int argc, char **argv)
 
 	    int num_features = langsys.get_feature_count ();
 	    printf ("        %d feature(s) found in language system\n", num_features);
-	    for (int n_feature = 0; n_feature < num_features; n_feature++) {
+	    for (int n_feature = 0; n_feature < num_features; n_feature++)
+	    {
 	      printf ("        Feature index %2d of %2d: %d\n", n_feature, num_features,
-	              langsys.get_feature_index (n_feature));
+		      langsys.get_feature_index (n_feature));
 	    }
 	  }
 	}
 
 	int num_features = g.get_feature_count ();
 	printf ("    %d feature(s) found in table\n", num_features);
-	for (int n_feature = 0; n_feature < num_features; n_feature++) {
+	for (int n_feature = 0; n_feature < num_features; n_feature++)
+	{
 	  const Feature &feature = g.get_feature (n_feature);
 	  int num_lookups = feature.get_lookup_count ();
 	  printf ("    Feature %2d of %2d: %c%c%c%c\n", n_feature, num_features,
-	          HB_UNTAG(g.get_feature_tag(n_feature)));
+		  HB_UNTAG(g.get_feature_tag(n_feature)));
 
 	  printf ("        %d lookup(s) found in feature\n", num_lookups);
 	  for (int n_lookup = 0; n_lookup < num_lookups; n_lookup++) {
 	    printf ("        Lookup index %2d of %2d: %d\n", n_lookup, num_lookups,
-	            feature.get_lookup_index (n_lookup));
+		    feature.get_lookup_index (n_lookup));
 	  }
 	}
 
 	int num_lookups = g.get_lookup_count ();
 	printf ("    %d lookup(s) found in table\n", num_lookups);
-	for (int n_lookup = 0; n_lookup < num_lookups; n_lookup++) {
+	for (int n_lookup = 0; n_lookup < num_lookups; n_lookup++)
+	{
 	  const Lookup &lookup = g.get_lookup (n_lookup);
 	  printf ("    Lookup %2d of %2d: type %d, props 0x%04X\n", n_lookup, num_lookups,
-	          lookup.get_type(), lookup.get_props());
+		  lookup.get_type(), lookup.get_props());
 	}
 
 	}
@@ -195,5 +205,3 @@ main (int argc, char **argv)
 
   return 0;
 }
-
-

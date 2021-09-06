@@ -33,7 +33,7 @@ SCAN_OPTIONS=--rebuild-types --deprecated-guards="HB_DISABLE_DEPRECATED" \
 
 # Header files or dirs to ignore when scanning. Use base file/dir names
 # e.g. IGNORE_HFILES=gtkdebug.h gtkintl.h private_code
-IGNORE_HFILES=`cd $(top_srcdir)/src; find . -path './hb-*/*.h' | sed 's@^.*/@@'`
+IGNORE_HFILES=`cd $(top_srcdir)/src; find . -path './*/*.h' | sed 's@^.*/@@'`
 if HAVE_GOBJECT
 else
 IGNORE_HFILES+=hb-gobject.h hb-gobject-enums.h hb-gobject-structs.h
@@ -62,24 +62,27 @@ CFILE_GLOB=$(top_srcdir)/src/hb-*.cc
 
 # Extra header to include when scanning, which are not under DOC_SOURCE_DIR
 # e.g. EXTRA_HFILES=$(top_srcdir}/contrib/extra.h
-EXTRA_HFILES=$(top_builddir)/src/hb-version.h
 
 # Images to copy into HTML directory.
 # e.g. HTML_IMAGES=$(top_srcdir)/gtk/stock-icons/stock_about_24.png
 HTML_IMAGES=  \
-	HarfBuzz.png
+	HarfBuzz.png \
+	HarfBuzz.svg
 
 # Extra SGML files that are included by $(DOC_MAIN_SGML_FILE).
 # e.g. content_files=running.sgml building.sgml changes-2.0.sgml
 content_files=	\
-	usermanual-buffers-language-script-and-direction.xml \
-	usermanual-clusters.xml \
-	usermanual-fonts-and-faces.xml \
-	usermanual-glyph-information.xml \
-	usermanual-hello-harfbuzz.xml \
-	usermanual-install-harfbuzz.xml \
-	usermanual-opentype-features.xml \
 	usermanual-what-is-harfbuzz.xml \
+	usermanual-install-harfbuzz.xml \
+	usermanual-getting-started.xml \
+	usermanual-glyph-information.xml \
+	usermanual-shaping-concepts.xml \
+	usermanual-object-model.xml \
+	usermanual-buffers-language-script-and-direction.xml \
+	usermanual-fonts-and-faces.xml \
+	usermanual-opentype-features.xml \
+	usermanual-clusters.xml \
+	usermanual-utilities.xml \
 	version.xml
 
 # SGML files where gtk-doc abbrevations (#GtkWidget) are expanded
@@ -110,7 +113,7 @@ EXTRA_DIST += version.xml.in
 # for --rebuild-sections in $(SCAN_OPTIONS) e.g. $(DOC_MODULE)-sections.txt
 #DISTCLEANFILES +=
 
-# Comment this out if you want 'make check' to test you doc status
+# Comment this out if you don't want 'make check' to test you doc status
 # and run some sanity checks
 if ENABLE_GTK_DOC
 TESTS_ENVIRONMENT = cd $(srcdir) && \
